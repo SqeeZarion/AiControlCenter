@@ -1,0 +1,215 @@
+name: aicontrolcenter
+
+x-dotnet-service: &dotnet-service
+  restart: "on-failure:3"
+  networks:
+    - aicontrolcenter
+  environment: &dotnet-environment
+    DOTNET_ENVIRONMENT: Development
+    ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+
+x-http-healthcheck: &http-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 10s
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/ai-control-center-angular/Dockerfile
+    restart: "on-failure:3"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    networks:
+      - aicontrolcenter
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+
+  gateway:
+    <<: *dotnet-service
+    build:
+      context: .
+      dockerfile: src/Gateway/AiControlCenter.Gateway/Dockerfile
+    environment:
+      <<: *dotnet-environment
+      ASPNETCORE_URLS: http://+:8080
+    depends_on:
+      identity-api:
+        condition: service_healthy
+      controlplane-api:
+        condition: service_healthy
+      orchestrator-api:
+        condition: service_healthy
+      integrations-api:
+        condition: service_healthy
+    ports:
+      - "5080:8080"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/live"]
+
+  identity-api:
+    <<: *dotnet-service
+    build:
+      context: .
+      dockerfile: src/Services/Identity/AiControlCenter.Identity.Api/Dockerfile
+    environment:
+      <<: *dotnet-environment
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__IdentityDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD};Search Path=identity"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5101:8080"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+
+  controlplane-api:
+    <<: *dotnet-service
+    build:
+      context: .
+      dockerfile: src/Services/ControlPlane/AiControlCenter.ControlPlane.Api/Dockerfile
+    environment:
+      <<: *dotnet-environment
+      ConnectionStrings__ControlPlaneDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${CONTROLPLANE_DB_USER};Password=${CONTROLPLANE_DB_PASSWORD};Search Path=control_plane"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5102:8080"
+      - "5103:8081"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+
+  orchestrator-api:
+    <<: *dotnet-service
+    build:
+      context: .
+      dockerfile: src/Services/Orchestrator/AiControlCenter.Orchestrator.Api/Dockerfile
+    environment:
+      <<: *dotnet-environment
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__OrchestratorDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${ORCHESTRATOR_DB_USER};Password=${ORCHESTRATOR_DB_PASSWORD};Search Path=orchestrator"
+      ControlPlane__GrpcAddress: http://controlplane-api:8081
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      controlplane-api:
+        condition: service_healthy
+    ports:
+      - "5104:8080"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+
+  worker-service:
+    <<: *dotnet-service
+    build:
+      context: .
+      dockerfile: src/Services/Worker/AiControlCenter.Worker.Service/Dockerfile
+    environment:
+      <<: *dotnet-environment
+      ASPNETCORE_URLS: http://+:8080
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "5106:8080"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+
+  integrations-api:
+    <<: *dotnet-service
+    build:
+      context: .
+      dockerfile: src/Services/Integrations/AiControlCenter.Integrations.Api/Dockerfile
+    environment:
+      <<: *dotnet-environment
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__IntegrationsDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${INTEGRATIONS_DB_USER};Password=${INTEGRATIONS_DB_PASSWORD};Search Path=integrations"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5105:8080"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+
+  postgres:
+    image: postgres:17.5-alpine
+    restart: "on-failure:3"
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DATABASE}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      IDENTITY_DB_USER: ${IDENTITY_DB_USER}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+      CONTROLPLANE_DB_USER: ${CONTROLPLANE_DB_USER}
+      CONTROLPLANE_DB_PASSWORD: ${CONTROLPLANE_DB_PASSWORD}
+      ORCHESTRATOR_DB_USER: ${ORCHESTRATOR_DB_USER}
+      ORCHESTRATOR_DB_PASSWORD: ${ORCHESTRATOR_DB_PASSWORD}
+      INTEGRATIONS_DB_USER: ${INTEGRATIONS_DB_USER}
+      INTEGRATIONS_DB_PASSWORD: ${INTEGRATIONS_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - aicontrolcenter
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+
+  rabbitmq:
+    image: rabbitmq:4.1.4-management-alpine
+    restart: "on-failure:3"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - aicontrolcenter
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+
+networks:
+  aicontrolcenter:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  rabbitmq_data:

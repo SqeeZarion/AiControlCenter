@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Contracts\AiControlCenter.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Grpc.Contracts\AiControlCenter.Grpc.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Observability\AiControlCenter.Observability.csproj" />
+    <ProjectReference Include="..\..\..\src\Gateway\AiControlCenter.Gateway\AiControlCenter.Gateway.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\ControlPlane\AiControlCenter.ControlPlane.Api\AiControlCenter.ControlPlane.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\ControlPlane\AiControlCenter.ControlPlane.Application\AiControlCenter.ControlPlane.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\ControlPlane\AiControlCenter.ControlPlane.Domain\AiControlCenter.ControlPlane.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\ControlPlane\AiControlCenter.ControlPlane.Infrastructure\AiControlCenter.ControlPlane.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Identity\AiControlCenter.Identity.Api\AiControlCenter.Identity.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Identity\AiControlCenter.Identity.Application\AiControlCenter.Identity.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Identity\AiControlCenter.Identity.Domain\AiControlCenter.Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Identity\AiControlCenter.Identity.Infrastructure\AiControlCenter.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Integrations\AiControlCenter.Integrations.Api\AiControlCenter.Integrations.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Integrations\AiControlCenter.Integrations.Application\AiControlCenter.Integrations.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Integrations\AiControlCenter.Integrations.Infrastructure\AiControlCenter.Integrations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Orchestrator\AiControlCenter.Orchestrator.Api\AiControlCenter.Orchestrator.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Orchestrator\AiControlCenter.Orchestrator.Application\AiControlCenter.Orchestrator.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Orchestrator\AiControlCenter.Orchestrator.Domain\AiControlCenter.Orchestrator.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Orchestrator\AiControlCenter.Orchestrator.Infrastructure\AiControlCenter.Orchestrator.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Worker\AiControlCenter.Worker.Service\AiControlCenter.Worker.Service.csproj" />
+  </ItemGroup>
+
+</Project>

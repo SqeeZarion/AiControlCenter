@@ -4,8 +4,18 @@
 AI-агентами, автоматизаціями, інтеграціями та довготривалими фоновими
 операціями.
 
-> Поточний репозиторій перебуває на етапі підготовки. Схема нижче описує
-> цільову взаємодію компонентів, а не вже реалізовану функціональність.
+> Етапи 0–1 реалізують лише технічний фундамент. Пунктирні потоки на схемі
+> показують майбутню бізнес-взаємодію Етапу 4, а не наявні Agent/Run сценарії.
+
+## Реалізований фундамент
+
+- .NET 10 solution із Gateway та п'ятьма сервісними межами;
+- Clean Architecture project references без міжсервісних залежностей;
+- YARP маршрутизація, технічний SignalR hub і `ServiceInfo` gRPC v1;
+- EF Core connectivity для чотирьох окремих PostgreSQL схем і ролей;
+- RabbitMQ/MassTransit hosts без production messages або consumers;
+- Problem Details, correlation ID, JSON logging, OpenTelemetry і health checks;
+- Angular 22 shell, Nginx, Docker Compose, тести та CI.
 
 ## Взаємодія компонентів
 
@@ -19,15 +29,16 @@ flowchart LR
     G -->|"REST routing"| OR["Orchestrator API"]
     G -->|"REST routing"| IN["Integrations API"]
 
-    CP <-->|"gRPC, synchronous"| OR
-    OR <-->|"gRPC, synchronous"| IN
+    OR -->|"gRPC ServiceInfo; future configuration lookup"| CP
 
-    OR -->|"MassTransit: send / publish"| MQ["RabbitMQ"]
-    MQ -->|"MassTransit consumer"| W["Worker Service"]
-    W -->|"Result event"| MQ
-    MQ -->|"Integration event"| G
+    OR -.->|"Stage 4: persist state, then send command"| MQ["RabbitMQ"]
+    MQ -.->|"Stage 4: consume command"| W["Worker Service"]
+    W -.->|"Stage 4: result event"| MQ
+    MQ -.->|"Stage 4: result to Orchestrator"| OR
+    OR -.->|"Stage 4: persist new state, then publish event"| MQ
+    MQ -.->|"Stage 4: state event"| G
 
-    G -->|"SignalR"| B
+    G -->|"SignalR technical connection; business updates in Stage 4"| B
 
     ID --> PG[("PostgreSQL")]
     CP --> PG
@@ -65,8 +76,8 @@ REST використовується між frontend і Gateway та для з�
 призначений для короткої синхронної взаємодії між внутрішніми .NET-сервісами,
 коли відповідь потрібна одразу.
 
-Наприклад, ControlPlane зможе синхронно передати Orchestrator необхідну
-службову конфігурацію. Довготривалу роботу через gRPC запускати не слід,
+Основний напрямок — `Orchestrator → ControlPlane`: Orchestrator отримуватиме
+конфігурацію агента або workflow з ControlPlane. Довготривалу роботу через gRPC запускати не слід,
 оскільки вона не повинна утримувати відкритий HTTP-запит.
 
 ### RabbitMQ і MassTransit
@@ -80,10 +91,10 @@ RabbitMQ є брокером асинхронних повідомлень, а M
 1. Orchestrator спочатку фіксує операцію у власній базі.
 2. Через MassTransit він надсилає команду в RabbitMQ.
 3. Worker отримує команду та виконує завдання у фоні.
-4. Worker публікує подію з результатом або помилкою.
-5. Orchestrator оновлює стан операції.
-6. Gateway отримує подію про зміну стану та передає оновлення браузеру через
-   SignalR.
+4. Worker публікує подію з результатом або помилкою назад у RabbitMQ.
+5. Orchestrator отримує результат і спочатку зберігає новий стан.
+6. Лише після успішного збереження Orchestrator публікує подію зміни стану.
+7. Gateway отримує цю подію та передає оновлення браузеру через SignalR.
 
 RabbitMQ не гарантує, що повідомлення буде доставлене лише один раз, тому
 майбутні consumers мають бути ідемпотентними. Для надійних бізнес-операцій
@@ -113,9 +124,42 @@ message contracts. Gateway і Worker не отримують власні схе
 
 ### Межі архітектурного фундаменту
 
-На Етапах 0–1 потрібно підготувати лише transport/configuration foundation:
-Gateway, контракти, підключення PostgreSQL і RabbitMQ, MassTransit, порожній
-SignalR hub, health checks, логування та Docker Compose.
+Етапи 0–1 містять лише transport/configuration foundation: Gateway,
+контракти, підключення PostgreSQL і RabbitMQ, MassTransit, технічний SignalR
+hub, health checks, логування та Docker Compose. Production message contracts
+і consumers для пунктирних потоків ще не створені.
 
 Авторизація, Directions, Agents, Runs, Worker-бізнес-логіка, OpenAI та
 зовнішні agent runtimes реалізуються окремими наступними етапами.
+
+## Локальний запуск
+
+Передумови: .NET SDK `10.0.302`, Node.js `24.x`, npm і Docker Compose.
+
+```powershell
+Copy-Item .env.example .env
+dotnet restore .\AiControlCenter.sln
+dotnet build .\AiControlCenter.sln --configuration Release --no-restore
+dotnet test .\AiControlCenter.sln --configuration Release --no-build
+
+npm.cmd ci --prefix .\frontend\ai-control-center-angular
+npm.cmd run build --prefix .\frontend\ai-control-center-angular -- --configuration production
+
+docker compose config
+docker compose up --build --detach --wait
+docker compose ps
+```
+
+Публічна адреса frontend: `http://localhost:8080`. Gateway доступний для
+діагностики на `http://localhost:5080`; Swagger сервісів — на портах
+`5101`, `5102`, `5104` і `5105`. RabbitMQ Management —
+`http://localhost:15672`.
+
+Після роботи:
+
+```powershell
+docker compose down
+```
+
+`.env` і локальні секрети ігноруються Git. Значення з `.env.example`
+призначені лише як безпечні Development placeholders і мають бути замінені.

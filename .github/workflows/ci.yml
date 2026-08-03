@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+          cache: npm
+          cache-dependency-path: frontend/ai-control-center-angular/package-lock.json
+
+      - name: Restore backend
+        run: dotnet restore ./AiControlCenter.sln
+
+      - name: Build backend
+        run: dotnet build ./AiControlCenter.sln --configuration Release --no-restore
+
+      - name: Test backend
+        run: dotnet test ./AiControlCenter.sln --configuration Release --no-build
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix ./frontend/ai-control-center-angular
+
+      - name: Build frontend
+        run: npm run build --prefix ./frontend/ai-control-center-angular -- --configuration production
+
+      - name: Test frontend
+        run: npm test --prefix ./frontend/ai-control-center-angular -- --watch=false
+
+      - name: Validate Docker Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet

@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option csharp_namespace = "AiControlCenter.Grpc.Contracts.V1";
+
+package aicontrolcenter.platform.v1;
+
+// Technical contract used to verify direct internal gRPC communication.
+//Файл визначає:
+//який віддалений метод існує;
+//які дані він приймає;
+//які дані повертає.
+service ServiceInfo {
+  rpc GetServiceInfo (ServiceInfoRequest) returns (ServiceInfoReply);
+}
+
+message ServiceInfoRequest {
+  string caller = 1;
+}
+
+message ServiceInfoReply {
+  string service_name = 1;
+  string version = 2;
+  string environment = 3;
+}
