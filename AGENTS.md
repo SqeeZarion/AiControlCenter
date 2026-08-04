@@ -4,7 +4,7 @@
 
 - `src/Gateway` — public API gateway and technical SignalR hub.
 - `src/Services` — Identity, ControlPlane, Orchestrator, Worker and Integrations.
-- `src/BuildingBlocks` — transport contracts and technical observability only.
+- `src/BuildingBlocks` — transport contracts, technical observability and shared security defaults only.
 - `frontend` — Angular shell and Nginx configuration.
 - `tests` — architecture, unit and integration tests.
 - `docs/architecture` — service boundaries and communication decisions.
@@ -16,7 +16,8 @@
 - Infrastructure may reference its own Application and Domain.
 - API may reference its own Application and Infrastructure.
 - Services must not reference another service's Domain, Application or Infrastructure.
-- Gateway and Worker may reference Contracts, Grpc.Contracts and Observability only.
+- Gateway may reference Contracts, Grpc.Contracts, Observability and Security only.
+- Worker may reference Contracts, Grpc.Contracts and Observability only.
 
 Do not implement a later roadmap stage without an explicit user request. Never add credentials, tokens or private keys to Git.
 

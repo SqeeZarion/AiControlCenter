@@ -24,12 +24,30 @@ public sealed class ServiceHostHealthTests
         where TEntryPoint : class
     {
         await using var factory = new WebApplicationFactory<TEntryPoint>()
-            .WithWebHostBuilder(builder => builder.UseSetting(
-                connectionStringKey,
-                "Host=127.0.0.1;Port=1;Database=foundation;Username=test;Password=test;Timeout=1"));
+            .WithWebHostBuilder(builder => builder
+                .UseSetting(connectionStringKey,
+                    "Host=127.0.0.1;Port=1;Database=foundation;Username=test;Password=test;Timeout=1")
+                .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath)
+                .UseSetting("JwtIssuer:PrivateKeyPath", TestJwtTokenFactory.PrivateKeyPath)
+                .UseSetting("IdentityBootstrap:Disabled", "true")
+                .UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), "aicontrolcenter-dp-tests")));
 
         using var client = factory.CreateClient();
         using var response = await client.GetAsync("/health/live");
         response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task IntegrationsDirectServiceInfoRequiresAuthentication()
+    {
+        await using var factory = new WebApplicationFactory<IntegrationsApiMarker>()
+            .WithWebHostBuilder(builder => builder
+                .UseSetting("ConnectionStrings:IntegrationsDatabase", "Host=127.0.0.1;Port=1;Database=foundation;Username=test;Password=test;Timeout=1")
+                .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath));
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/service-info");
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }

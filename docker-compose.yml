@@ -26,7 +26,8 @@ services:
     ports:
       - "8080:80"
     networks:
-      - aicontrolcenter
+      aicontrolcenter:
+        ipv4_address: 172.31.0.10
     healthcheck:
       <<: *http-healthcheck
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
@@ -39,6 +40,12 @@ services:
     environment:
       <<: *dotnet-environment
       ASPNETCORE_URLS: http://+:8080
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
     depends_on:
       identity-api:
         condition: service_healthy
@@ -53,6 +60,49 @@ services:
     healthcheck:
       <<: *http-healthcheck
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/live"]
+    networks:
+      aicontrolcenter:
+        ipv4_address: 172.31.0.20
+
+  identity-data-protection-init:
+    image: alpine:3.22
+    restart: "no"
+    user: "0:0"
+    command:
+      - sh
+      - -ec
+      - |
+        chown -R 1654:1654 /var/lib/aicontrolcenter/data-protection
+        chmod 700 /var/lib/aicontrolcenter/data-protection
+        find /var/lib/aicontrolcenter/data-protection -maxdepth 1 -type f -exec chmod 600 {} \;
+    volumes:
+      - identity_data_protection:/var/lib/aicontrolcenter/data-protection
+    networks:
+      - aicontrolcenter
+
+  identity-migrations:
+    <<: *dotnet-service
+    restart: "no"
+    build:
+      context: .
+      dockerfile: src/Services/Identity/AiControlCenter.Identity.Api/Dockerfile
+    command: ["--migrate"]
+    environment:
+      <<: *dotnet-environment
+      ConnectionStrings__IdentityDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD};Search Path=identity"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      DataProtection__KeysPath: /var/lib/aicontrolcenter/data-protection
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
+      - identity_data_protection:/var/lib/aicontrolcenter/data-protection
+    depends_on:
+      identity-data-protection-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
 
   identity-api:
     <<: *dotnet-service
@@ -63,9 +113,25 @@ services:
       <<: *dotnet-environment
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__IdentityDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD};Search Path=identity"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      JwtIssuer__PrivateKeyPath: /run/aicontrolcenter-keys/identity-private.pem
+      DataProtection__KeysPath: /var/lib/aicontrolcenter/data-protection
+      IdentityBootstrap__Email: ${IDENTITY_BOOTSTRAP_EMAIL:-}
+      IdentityBootstrap__TemporaryPassword: ${IDENTITY_BOOTSTRAP_TEMPORARY_PASSWORD:-}
+      IdentityBootstrap__DisplayName: ${IDENTITY_BOOTSTRAP_DISPLAY_NAME:-Platform Administrator}
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PRIVATE_KEY_PATH:-./secrets/identity/identity-private.pem}
+        target: /run/aicontrolcenter-keys/identity-private.pem
+        read_only: true
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
+      - identity_data_protection:/var/lib/aicontrolcenter/data-protection
     depends_on:
-      postgres:
-        condition: service_healthy
+      identity-migrations:
+        condition: service_completed_successfully
     ports:
       - "5101:8080"
     healthcheck:
@@ -80,6 +146,12 @@ services:
     environment:
       <<: *dotnet-environment
       ConnectionStrings__ControlPlaneDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${CONTROLPLANE_DB_USER};Password=${CONTROLPLANE_DB_PASSWORD};Search Path=control_plane"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +176,12 @@ services:
       RabbitMq__Port: 5672
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASSWORD}
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,6 +225,12 @@ services:
       <<: *dotnet-environment
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__IntegrationsDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${INTEGRATIONS_DB_USER};Password=${INTEGRATIONS_DB_PASSWORD};Search Path=integrations"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -209,7 +293,11 @@ services:
 networks:
   aicontrolcenter:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
 
 volumes:
   postgres_data:
   rabbitmq_data:
+  identity_data_protection:

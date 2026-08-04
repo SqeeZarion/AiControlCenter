@@ -4,19 +4,22 @@
 
 Public entry point for REST routes and the technical SignalR hub. It does not
 own data or reference service Domain, Application or Infrastructure projects.
-Authentication and authorization are deferred to Stage 2.
+Stage 2 validates Identity-issued JWTs, applies YARP policies and protects the
+SignalR hub. It never references Identity service layers.
 
 ## Identity
 
-Owns the `identity` PostgreSQL schema. Stage 1 contains only the service host,
-layer boundaries and database connectivity. Users, roles, JWT and refresh
-tokens are not implemented.
+Owns users, fixed system roles, password hashes and rotating refresh-token
+families in the `identity` PostgreSQL schema. It is the only service that has
+the RSA private signing key. Public registration is deliberately absent;
+users are created by Admins.
 
 ## ControlPlane
 
 Owns the `control_plane` schema and exposes the versioned technical
 `ServiceInfo` gRPC service. Directions, agents, workflows and schedules are
-not implemented.
+not implemented. Stage 2 protects the technical gRPC method with delegated
+user authentication.
 
 ## Orchestrator
 

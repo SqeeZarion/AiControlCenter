@@ -96,13 +96,13 @@ public static class ServiceDefaultsExtensions
         {
             Predicate = registration => registration.Tags.Contains("live"),
             ResponseWriter = WriteHealthResponseAsync,
-        });
+        }).AllowAnonymous();
 
         endpoints.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => !registration.Tags.Contains("live"),
             ResponseWriter = WriteHealthResponseAsync,
-        });
+        }).AllowAnonymous();
 
         return endpoints;
     }

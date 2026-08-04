@@ -1,0 +1,14 @@
+:host { display: block; min-height: 100vh; }
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
+form { width: min(420px, 100%); padding: 2rem; border: 1px solid #293449; border-radius: 1.25rem; background: #0d1525; box-shadow: 0 24px 80px rgb(0 0 0 / 30%); }
+h1 { margin: .5rem 0; font-size: 2rem; }
+.eyebrow { margin: 0; color: #7dd3fc; font-size: .75rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.subtitle { margin: 0 0 1.5rem; color: #a9b4c8; line-height: 1.5; }
+label { display: grid; gap: .45rem; margin-top: 1rem; color: #cbd5e1; font-weight: 600; }
+input { padding: .85rem 1rem; border: 1px solid #334155; border-radius: .65rem; color: #f8fafc; background: #080f1d; font: inherit; }
+input:focus { outline: 2px solid #38bdf8; outline-offset: 2px; }
+button { width: 100%; margin-top: 1.5rem; padding: .85rem; border: 0; border-radius: .65rem; color: #07111f; background: #7dd3fc; font: inherit; font-weight: 800; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+.error, .notice { padding: .75rem; border-radius: .5rem; }
+.error { color: #fecaca; background: rgb(127 29 29 / 35%); }
+.notice { color: #bbf7d0; background: rgb(20 83 45 / 35%); }

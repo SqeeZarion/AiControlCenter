@@ -1,11 +1,14 @@
 <main>
   <header>
     <div>
-      <p class="eyebrow">Architecture foundation</p>
+      <p class="eyebrow">Authenticated control center</p>
       <h1>AiControlCenter</h1>
-      <p class="subtitle">Stage 0–1 technical shell</p>
+      <p class="subtitle">{{ auth.user()?.displayName }} · {{ auth.user()?.roles?.join(', ') }}</p>
     </div>
-    <app-connection-status [connected]="realtime.isConnected()" />
+    <div class="header-actions">
+      <app-connection-status [connected]="realtime.isConnected()" />
+      <button type="button" (click)="logout()">Вийти</button>
+    </div>
   </header>
 
   <section class="hero">
@@ -13,8 +16,8 @@
       <p class="eyebrow">Gateway status</p>
       <h2>{{ gateway()?.service ?? (checked() ? 'Gateway unavailable' : 'Checking gateway…') }}</h2>
       <p>
-        REST routing and the technical SignalR handshake are ready for future modules.
-        No authentication, agents, runs or business workflows are implemented yet.
+        Identity, role authorization and protected SignalR are active.
+        Agents, runs and business workflows are intentionally not implemented yet.
       </p>
     </div>
     <dl>
@@ -27,7 +30,7 @@
   <section class="services" aria-label="Foundation services">
     @for (service of ['Identity', 'ControlPlane', 'Orchestrator', 'Worker', 'Integrations']; track service) {
       <article>
-        <span>Foundation host</span>
+        <span>Protected host</span>
         <h3>{{ service }}</h3>
         <p>Business capabilities are intentionally deferred to their roadmap stage.</p>
       </article>

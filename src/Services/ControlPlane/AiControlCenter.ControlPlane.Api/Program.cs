@@ -3,12 +3,16 @@ using AiControlCenter.ControlPlane.Api.Grpc;
 using AiControlCenter.ControlPlane.Infrastructure;
 using AiControlCenter.ControlPlane.Infrastructure.Persistence;
 using AiControlCenter.Observability;
+using AiControlCenter.Security;
 using FluentValidation;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.Services.AddApiFoundation();
+//Метод реєструє повну JWT authentication для поточного сервісу.
+builder.Services.AddPlatformAuthentication(builder.Configuration);
+builder.Services.AddPlatformAuthorization();
 builder.Services.AddControlPlaneInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ControlPlaneDbContext>("control-plane-database", tags: ["ready"]);
@@ -21,6 +25,8 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 app.UseApiFoundation();
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -30,14 +36,16 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDefaultHealthEndpoints();
-app.MapGrpcService<ServiceInfoGrpcService>();
+app.MapGrpcService<ServiceInfoGrpcService>()
+    .RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
 app.MapGet("/service-info", (IHostEnvironment environment) => Results.Ok(new
 {
     service = environment.ApplicationName,
     version = "v1",
     environment = environment.EnvironmentName,
 }))
-.WithName("GetControlPlaneServiceInfo");
+.WithName("GetControlPlaneServiceInfo")
+.RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
 
 app.Run();
 

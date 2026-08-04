@@ -16,12 +16,16 @@ Infrastructure  <- Api
 - Infrastructure references only its own Application and Domain.
 - API references its own Application and Infrastructure plus technical
   BuildingBlocks where needed.
-- Gateway and Worker may reference Contracts, Grpc.Contracts and
-  Observability, but not service layers.
+- Gateway may reference Contracts, Grpc.Contracts, Observability and the
+  technical Security building block, but not service layers.
+- Worker may reference Contracts, Grpc.Contracts and Observability, but not
+  service layers.
 - A service may not reference another service's Domain, Application or
   Infrastructure.
 - BuildingBlocks contain transport contracts and technical defaults, never
-  shared domain entities.
+  shared domain entities. `AiControlCenter.Security` is limited to JWT
+  validation, claim/policy names, SignalR token extraction and endpoint
+  authorization helpers.
 
 `AiControlCenter.ArchitectureTests` validates project references and banned
 package references directly from the project files, including empty layers.
