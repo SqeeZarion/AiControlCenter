@@ -12,6 +12,23 @@
   checks, but no production messages or consumers.
 - Data-owner APIs verify PostgreSQL connectivity in readiness checks.
 
+## Implemented in Stage 2
+
+- Angular obtains a short-lived access JWT from Identity and keeps it only in
+  memory.
+- A rotating opaque refresh token is stored in an HttpOnly, SameSite=Strict
+  cookie; only its SHA-256 hash is stored by Identity.
+- Gateway validates every protected request and forwards the delegated Bearer
+  token through YARP.
+- Identity, ControlPlane, Orchestrator and Integrations validate the token
+  again as a defense-in-depth boundary.
+- Orchestrator forwards the delegated Bearer token in gRPC metadata to the
+  protected ControlPlane ServiceInfo method.
+- The SignalR hub requires a valid token. The browser client supplies it with
+  `accessTokenFactory` and reconnects after refresh.
+- Health endpoints and the four required Identity session endpoints are the
+  only anonymous runtime routes.
+
 ## Deferred until Stage 4
 
 The future durable flow is ordered as follows:

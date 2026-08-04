@@ -61,6 +61,30 @@ public sealed class DependencyRulesTests
         }
     }
 
+    [Fact]
+    public void SecurityBuildingBlockContainsOnlyTechnicalAuthenticationCode()
+    {
+        var project = Path.Combine(
+            RepositoryRoot,
+            "src",
+            "BuildingBlocks",
+            "AiControlCenter.Security",
+            "AiControlCenter.Security.csproj");
+
+        Assert.Empty(GetProjectReferences(project));
+        Assert.All(GetPackageReferences(project), package =>
+            Assert.Equal("Microsoft.AspNetCore.Authentication.JwtBearer", package));
+
+        var source = string.Join('\n', Directory.GetFiles(
+                Path.GetDirectoryName(project)!,
+                "*.cs",
+                SearchOption.AllDirectories)
+            .Select(File.ReadAllText));
+        Assert.DoesNotContain("DbContext", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("IUserRepository", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("IdentityApplicationService", source, StringComparison.Ordinal);
+    }
+
     private static void AssertDomainPackagesAreClean(string project)
     {
         var bannedPrefixes = new[]

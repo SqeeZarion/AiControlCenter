@@ -1,15 +1,20 @@
 using AiControlCenter.Grpc.Contracts.V1;
 using AiControlCenter.Observability;
+using AiControlCenter.Security;
 using AiControlCenter.Orchestrator.Api;
 using AiControlCenter.Orchestrator.Api.Messaging;
 using AiControlCenter.Orchestrator.Infrastructure;
 using AiControlCenter.Orchestrator.Infrastructure.Persistence;
 using FluentValidation;
+using Grpc.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.Services.AddApiFoundation();
+//Метод реєструє повну JWT authentication для поточного сервісу.
+builder.Services.AddPlatformAuthentication(builder.Configuration);
+builder.Services.AddPlatformAuthorization();
 builder.Services.AddOrchestratorInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<OrchestratorDbContext>("orchestrator-database", tags: ["ready"]);
@@ -27,6 +32,8 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 app.UseApiFoundation();
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -41,14 +48,23 @@ app.MapGet("/service-info", (IHostEnvironment environment) => Results.Ok(new
     version = "v1",
     environment = environment.EnvironmentName,
 }))
-.WithName("GetOrchestratorServiceInfo");
+.WithName("GetOrchestratorServiceInfo")
+.RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
 
 app.MapGet(
     "/service-info/control-plane",
-    async (ServiceInfo.ServiceInfoClient client, CancellationToken cancellationToken) =>
+    async (HttpContext context, ServiceInfo.ServiceInfoClient client, CancellationToken cancellationToken) =>
     {
+        var authorization = context.Request.Headers.Authorization.ToString();
+        if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Unauthorized();
+        }
+
+        var metadata = new Metadata { { "Authorization", authorization } };
         var reply = await client.GetServiceInfoAsync(
             new ServiceInfoRequest { Caller = "orchestrator" },
+            headers: metadata,
             cancellationToken: cancellationToken);
 
         return Results.Ok(new
@@ -58,7 +74,8 @@ app.MapGet(
             environment = reply.Environment,
         });
     })
-.WithName("GetControlPlaneServiceInfoViaGrpc");
+.WithName("GetControlPlaneServiceInfoViaGrpc")
+.RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
 
 app.Run();
 

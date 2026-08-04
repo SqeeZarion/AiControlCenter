@@ -4,6 +4,7 @@
     <ProjectReference Include="..\AiControlCenter.Integrations.Application\AiControlCenter.Integrations.Application.csproj" />
     <ProjectReference Include="..\AiControlCenter.Integrations.Infrastructure\AiControlCenter.Integrations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Observability\AiControlCenter.Observability.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Security\AiControlCenter.Security.csproj" />
   </ItemGroup>
 
   <ItemGroup>

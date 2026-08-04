@@ -47,9 +47,9 @@ public sealed class RabbitMqConnectivityTests
         }
     }
 
-    private sealed record InfrastructureProbe(Guid CorrelationId);
+    public sealed record InfrastructureProbe(Guid CorrelationId);
 
-    private sealed class InfrastructureProbeConsumer : IConsumer<InfrastructureProbe>
+    public sealed class InfrastructureProbeConsumer : IConsumer<InfrastructureProbe>
     {
         public Task Consume(ConsumeContext<InfrastructureProbe> context) => Task.CompletedTask;
     }

@@ -9,5 +9,8 @@ WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=build /app/publish .
+RUN mkdir -p /var/lib/aicontrolcenter/data-protection \
+    && chown -R $APP_UID:$APP_UID /var/lib/aicontrolcenter/data-protection \
+    && chmod 700 /var/lib/aicontrolcenter/data-protection
 USER $APP_UID
 ENTRYPOINT ["dotnet", "AiControlCenter.Identity.Api.dll"]

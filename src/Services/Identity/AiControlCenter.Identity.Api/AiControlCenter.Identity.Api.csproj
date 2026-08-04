@@ -4,10 +4,15 @@
     <ProjectReference Include="..\AiControlCenter.Identity.Application\AiControlCenter.Identity.Application.csproj" />
     <ProjectReference Include="..\AiControlCenter.Identity.Infrastructure\AiControlCenter.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Observability\AiControlCenter.Observability.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Security\AiControlCenter.Security.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

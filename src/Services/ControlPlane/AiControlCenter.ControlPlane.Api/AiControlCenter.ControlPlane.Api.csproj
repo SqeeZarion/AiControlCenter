@@ -5,6 +5,7 @@
     <ProjectReference Include="..\AiControlCenter.ControlPlane.Infrastructure\AiControlCenter.ControlPlane.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Grpc.Contracts\AiControlCenter.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Observability\AiControlCenter.Observability.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Security\AiControlCenter.Security.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,10 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace AiControlCenter.Gateway.Hubs;
 
 //створює SignalR Hub — точку постійного двостороннього зв’язку між Angular і Gateway.
 
-public sealed class SystemHub : Hub
+[Authorize]
+public sealed class SystemHub(TimeProvider timeProvider) : Hub
 {
     // Використовується для перевірки:
     //
@@ -12,7 +14,7 @@ public sealed class SystemHub : Hub
     // чи доступний Gateway;
     // чи може клієнт викликати серверний метод;
     // чи правильно серіалізується відповідь.
-    public TechnicalPong Ping() => new("gateway", DateTimeOffset.UtcNow);
+    public TechnicalPong Ping() => new("gateway", timeProvider.GetUtcNow());
 }
 
 // Це незмінна транспортна модель відповіді.
