@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddApiFoundation();
 builder.Services.AddPlatformAuthentication(builder.Configuration);
+//перевіряє користувача
 builder.Services.AddPlatformAuthorization();
 builder.Services.AddIntegrationsInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()

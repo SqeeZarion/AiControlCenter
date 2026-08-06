@@ -29,6 +29,21 @@
 - Health endpoints and the four required Identity session endpoints are the
   only anonymous runtime routes.
 
+## Correlation ID
+
+`CorrelationIdMiddleware` перевіряє вхідний `X-Correlation-ID`. Значення
+приймається, якщо після trim воно має не більше 128 символів і не містить
+control characters; інакше сервіс використовує власний ASP.NET Core
+`TraceIdentifier`. Обраний ID записується у response header
+`X-Correlation-ID`, у `HttpContext.TraceIdentifier` і в logging scope як
+`CorrelationId`.
+
+Поточна реалізація не записує автоматично згенерований ID назад у request
+header і не має окремого outgoing HTTP/gRPC propagator. Тому end-to-end ID між
+Gateway та внутрішнім API гарантовано зберігається лише тоді, коли caller уже
+надіслав валідний `X-Correlation-ID` і transport передав header далі. Без
+вхідного header кожен service може створити власний локальний trace ID.
+
 ## Deferred until Stage 4
 
 The future durable flow is ordered as follows:

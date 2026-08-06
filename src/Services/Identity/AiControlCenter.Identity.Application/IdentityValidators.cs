@@ -1,5 +1,6 @@
 using FluentValidation;
 
+//Валідатори перевіряють форму вхідних даних до запуску бізнес-логіки.
 namespace AiControlCenter.Identity.Application;
 
 public sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
