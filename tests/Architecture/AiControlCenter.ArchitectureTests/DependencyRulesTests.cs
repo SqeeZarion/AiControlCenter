@@ -54,10 +54,12 @@ public sealed class DependencyRulesTests
         foreach (var host in hosts)
         {
             Assert.All(GetProjectReferences(host), reference =>
-                Assert.Contains(
-                    $"{Path.DirectorySeparatorChar}BuildingBlocks{Path.DirectorySeparatorChar}",
-                    reference,
-                    StringComparison.OrdinalIgnoreCase));
+                Assert.True(
+                    reference.Contains(
+                        $"{Path.DirectorySeparatorChar}BuildingBlocks{Path.DirectorySeparatorChar}",
+                        StringComparison.OrdinalIgnoreCase),
+                    $"Gateway and Worker may reference only BuildingBlocks projects. "
+                    + $"Host: {host}; actual reference: {reference}"));
         }
     }
 
@@ -126,7 +128,10 @@ public sealed class DependencyRulesTests
             .Descendants("ProjectReference")
             .Select(element => element.Attribute("Include")?.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => Path.GetFullPath(Path.Combine(directory, value!)))
+            .Select(value => value!
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar))
+            .Select(value => Path.GetFullPath(Path.Combine(directory, value)))
             .ToArray();
     }
 
