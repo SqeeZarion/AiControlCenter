@@ -2,6 +2,7 @@ using AiControlCenter.Identity.Domain;
 
 namespace AiControlCenter.Identity.Application;
 
+//IUserRepository описує, що Application може робити з користувачами.
 public interface IUserRepository
 {
     Task<User?> GetByEmailAsync(Email email, CancellationToken cancellationToken);
@@ -37,8 +38,10 @@ public interface IRefreshTokenRepository
 
     void Add(RefreshToken refreshToken);
 
+    //Відкликає всі refresh-токени користувача.
     Task RevokeAllAsync(Guid userId, DateTimeOffset now, string reason, CancellationToken cancellationToken);
 
+    //Відкликає всі зв'язані токени, при спробі використати старого токена й просить користувача заново залогінитись
     Task RevokeFamilyAsync(
         RefreshTokenFamilyId familyId,
         DateTimeOffset now,
@@ -46,6 +49,7 @@ public interface IRefreshTokenRepository
         CancellationToken cancellationToken);
 }
 
+//керує збереженням змін та транзакціями.
 public interface IIdentityUnitOfWork
 {
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
@@ -55,6 +59,7 @@ public interface IIdentityUnitOfWork
         CancellationToken cancellationToken);
 }
 
+//перевірка паролів
 public enum PasswordVerificationResult
 {
     Failed = 0,
@@ -62,6 +67,7 @@ public enum PasswordVerificationResult
     SuccessRehashNeeded = 2,
 }
 
+//Перетворює пароль на hash для збереження в БД.
 public interface IPasswordHasher
 {
     string Hash(string password);
@@ -71,6 +77,7 @@ public interface IPasswordHasher
     void VerifyUnknown(string providedPassword);
 }
 
+//Створення access-токена
 public interface IAccessTokenIssuer
 {
     AccessTokenResult Issue(
@@ -79,6 +86,7 @@ public interface IAccessTokenIssuer
         DateTimeOffset issuedAt);
 }
 
+//Створення refresh-токена
 public interface IRefreshTokenGenerator
 {
     GeneratedRefreshToken Generate();

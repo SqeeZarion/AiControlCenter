@@ -18,12 +18,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddExceptionHandler<IdentityExceptionHandler>();
 builder.Services.AddApiFoundation();
+//Цей extension method реєструє Application-компоненти в DI-контейнері. Валідатори
 builder.Services.AddIdentityApplication();
 builder.Services.AddIdentityInfrastructure(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 //Метод реєструє повну JWT authentication для поточного сервісу.
 builder.Services.AddPlatformAuthentication(builder.Configuration);
+//перевіряє користувача
 builder.Services.AddPlatformAuthorization();
 builder.Services.AddAntiforgery(options =>
 {
@@ -110,6 +112,7 @@ else
     serviceInfo.RequireAuthorization(SecurityPolicyNames.AnyPlatformUser);
 }
 
+//Цей файл описує HTTP API Identity.
 app.MapIdentityEndpoints(app.Environment);
 
 app.Run();

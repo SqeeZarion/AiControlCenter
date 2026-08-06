@@ -14,6 +14,7 @@ builder.AddServiceDefaults();
 builder.Services.AddApiFoundation();
 //Метод реєструє повну JWT authentication для поточного сервісу.
 builder.Services.AddPlatformAuthentication(builder.Configuration);
+//перевіряє користувача
 builder.Services.AddPlatformAuthorization();
 builder.Services.AddOrchestratorInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()

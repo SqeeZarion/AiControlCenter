@@ -6,22 +6,44 @@ using Microsoft.AspNetCore.Antiforgery;
 
 namespace AiControlCenter.Identity.Api;
 
+// визначає:
+//
+// які URL має Identity;
+// який HTTP-метод треба використати;
+// які дані приймає кожен URL;
+// який код виконується після запиту;
+// хто має право викликати endpoint;
+// яку HTTP-відповідь повернути.
+//
+// Простіше: цей файл — це список входів у сервіс Identity.
+
 public static class IdentityEndpointExtensions
 {
     private const string RefreshCookieName = "aicontrolcenter.refresh";
+
+    // Для чого це потрібно
+    // Refresh-токен зберігається в cookie. Браузер додає cookie до запиту автоматично. Через це сторонній сайт потенційно може спробувати змусити браузер користувача надіслати запит.
 
     public static IEndpointRouteBuilder MapIdentityEndpoints(
         this IEndpointRouteBuilder endpoints,
         IHostEnvironment environment)
     {
+
         var auth = endpoints.MapGroup("/v1/auth");
+        // приймає HTTP-запит, перевіряє його, викликає IdentityApplicationService і формує HTTP-відповідь.
         auth.MapGet("/csrf", (HttpContext context, IAntiforgery antiforgery) =>
         {
+            // створює пару пов’язаних значень:
+            //
+            // захищений antiforgery cookie;
+            // request token, який frontend повинен передати в заголовку.
             var tokens = antiforgery.GetAndStoreTokens(context);
             context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
             {
+                //фронт може бачити той токен
                 HttpOnly = false,
                 Secure = !environment.IsDevelopment(),
+                //Cookie не повинна надсилатися із запитами, ініційованими стороннім сайтом.
                 SameSite = SameSiteMode.Strict,
                 Path = "/",
                 IsEssential = true,
@@ -184,6 +206,7 @@ public static class IdentityEndpointExtensions
             ? userId
             : throw new IdentityAuthenticationException();
 
+    //створює refresh-токен;
     private static void SetRefreshCookie(
         HttpContext context,
         AuthSessionResult session,

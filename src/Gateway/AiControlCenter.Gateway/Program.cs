@@ -11,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddApiFoundation();
 builder.Services.AddPlatformAuthentication(builder.Configuration);
+//перевіряє користувача
 builder.Services.AddPlatformAuthorization();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<ForwardedHeadersOptions>(options =>

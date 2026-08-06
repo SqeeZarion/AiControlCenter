@@ -22,6 +22,7 @@ public static class PlatformSecurityExtensions
             .Get<PlatformAuthenticationOptions>()
             ?? throw new InvalidOperationException("Authentication configuration is required.");
 
+        //Цей метод перевіряє конфігурацію під час запуску сервісу.
         Validate(settings);
 
         // Процес:
@@ -36,12 +37,14 @@ public static class PlatformSecurityExtensions
         rsa.ImportFromPem(File.ReadAllText(settings.PublicKeyPath));
         var signingKey = new RsaSecurityKey(rsa) { KeyId = settings.KeyId };
 
+        //Bearer означає: хто володіє токеном, той може його використати, тому токен не можна записувати в логи або передавати стороннім особам.
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
+                    //Сервіс перевіряє, чи JWT підписаний приватним ключем Identity. (тобто  якщо змінити роль, токен перестає працювати)
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = signingKey,
                     ValidateIssuer = true,
@@ -50,6 +53,7 @@ public static class PlatformSecurityExtensions
                     ValidAudience = settings.Audience,
                     ValidateLifetime = true,
                     RequireExpirationTime = true,
+                    //Непідписаний JWT не буде прийнятий.
                     RequireSignedTokens = true,
                     ClockSkew = TimeSpan.FromSeconds(settings.ClockSkewSeconds),
                     NameClaimType = JwtRegisteredClaimNames.Sub,
@@ -58,6 +62,11 @@ public static class PlatformSecurityExtensions
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    // Цей код:
+                    //
+                    // Перевіряє, що запит іде саме до /hubs/system.
+                    // Шукає access_token.
+                    // Передає його JWT middleware.
                     OnMessageReceived = context =>
                     {
                         if (context.HttpContext.Request.Path.StartsWithSegments("/hubs/system")
@@ -68,6 +77,7 @@ public static class PlatformSecurityExtensions
 
                         return Task.CompletedTask;
                     },
+                    //Перевірка призначення токена
                     OnTokenValidated = context =>
                     {
                         if (!context.Principal!.HasClaim(
@@ -85,10 +95,12 @@ public static class PlatformSecurityExtensions
         return services;
     }
 
+    //перевіряє роль користувача
     public static IServiceCollection AddPlatformAuthorization(this IServiceCollection services)
     {
         services.AddAuthorization(options =>
         {
+            //fallback policy все одно вимагатиме авторизованого користувача.
             options.FallbackPolicy = new AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser()
                 .Build();
@@ -97,6 +109,7 @@ public static class PlatformSecurityExtensions
                 policy.RequireRole("Admin", "Developer"));
             options.AddPolicy(SecurityPolicyNames.AnyPlatformUser, policy =>
                 policy.RequireRole("Admin", "Developer", "User"));
+            //Зміна тимчасового пароля
             options.AddPolicy(SecurityPolicyNames.PasswordChanged, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireAssertion(context =>
@@ -115,6 +128,7 @@ public static class PlatformSecurityExtensions
         return builder;
     }
 
+    //Цей метод перевіряє конфігурацію під час запуску сервісу.
     private static void Validate(PlatformAuthenticationOptions settings)
     {
         if (string.IsNullOrWhiteSpace(settings.Issuer)

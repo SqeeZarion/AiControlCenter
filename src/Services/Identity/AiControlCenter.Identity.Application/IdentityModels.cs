@@ -2,6 +2,8 @@ using AiControlCenter.Identity.Domain;
 
 namespace AiControlCenter.Identity.Application;
 
+//Ці класи описують дані, які приходять від frontend.
+
 public sealed record LoginRequest(string Email, string Password);
 
 public sealed record CreateUserRequest(
