@@ -1,39 +1,37 @@
-# ADR 0001: Closed first-party session protocol
+# ADR 0001: Закритий first-party session protocol
 
 - Status: Accepted
 - Date: 2026-08-03
-- Scope: Stage 2 Identity and authorization
+- Scope: Identity та authorization для довіреного Angular-клієнта
 
-## Context
+## Контекст
 
-AiControlCenter currently has one trusted Angular client served through the
-same frontend Nginx and Gateway. It has no third-party clients, federation or
-external delegated authorization requirements.
+AiControlCenter має один trusted Angular client, який обслуговується через той самий frontend Nginx і Gateway. Third-party clients, federation та external delegated authorization requirements відсутні.
 
-## Decision
+## Рішення
 
-Identity implements a closed first-party session protocol, not an OAuth or
-OpenID Connect authorization server.
+Identity реалізує закритий first-party session protocol, а не OAuth/OpenID Connect authorization server.
 
-- Angular submits credentials only to the versioned Identity login endpoint.
-- Identity returns an RSA-signed access JWT with a maximum lifetime of ten
-  minutes.
-- The access token is held only in Angular memory.
-- Identity sends a rotating opaque refresh token in an HttpOnly,
-  SameSite=Strict cookie and stores only its SHA-256 hash.
-- Refresh reuse revokes the entire token family.
-- Gateway and every internal API validate issuer, audience, RSA signature,
-  algorithm, expiration and token-use claim.
-- Public registration is not supported. Only Admins create users.
+- Angular надсилає credentials лише до versioned Identity login endpoint.
+- Identity повертає RSA-signed access JWT із lifetime не більше десяти хвилин.
+- Access token зберігається лише в Angular memory.
+- Identity передає rotating opaque refresh token у HttpOnly, SameSite=Strict cookie і зберігає лише його SHA-256 hash.
+- Refresh reuse відкликає всю token family.
+- Gateway і кожен internal API перевіряють issuer, audience, RSA signature, algorithm, expiration і token-use claim.
+- Public registration не підтримується; users створюють лише Admins.
 
-## Consequences and limitations
+```mermaid
+flowchart LR
+    Angular -->|"credentials"| Identity
+    Identity -->|"access JWT"| Memory["Angular memory"]
+    Identity -->|"refresh token"| Cookie["HttpOnly cookie"]
+    Identity -->|"SHA-256 hash"| Db["PostgreSQL"]
+```
 
-This protocol is intentionally limited to the single first-party browser
-client. It must not be advertised as OAuth/OIDC, used for third-party consent,
-or extended with ad-hoc grants. Logout, blocking and role changes can leave an
-already-issued access token valid until its short expiration.
+## Наслідки й обмеження
 
-If external, mobile or independently operated clients are introduced, the
-protocol must be replaced with OpenIddict or another reviewed OIDC provider
-using Authorization Code with PKCE. The custom password/token endpoints must
-not become a general authorization server.
+Протокол обмежений одним first-party browser client. Його не можна представляти як OAuth/OIDC, використовувати для third-party consent або розширювати ad-hoc grants. Logout, blocking і role changes можуть залишити вже виданий access token валідним до його короткого expiration.
+
+Якщо з’являться external, mobile або independently operated clients, протокол слід замінити на OpenIddict чи інший reviewed OIDC provider з Authorization Code + PKCE. Custom password/token endpoints не повинні ставати general authorization server.
+
+[Authentication flow](../../identity/authentication-flow.md) · [Identity security](../identity-security.md)

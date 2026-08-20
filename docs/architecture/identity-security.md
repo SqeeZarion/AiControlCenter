@@ -1,69 +1,57 @@
-# Identity security operations
+# Експлуатація безпеки Identity
 
 ## Development setup
 
-Generate an ignored 3072-bit RSA pair without external packages:
+Створіть ignored 3072-bit RSA pair без зовнішніх пакетів:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\security\New-IdentityDevelopmentKeys.ps1
 ```
 
-Copy `.env.example` to the ignored `.env` and set
-`IDENTITY_BOOTSTRAP_EMAIL` and `IDENTITY_BOOTSTRAP_TEMPORARY_PASSWORD`. The
-temporary password must contain 12–128 characters. Values and key material
-must never be committed or logged.
+Скопіюйте `.env.example` у ignored `.env` і задайте `IDENTITY_BOOTSTRAP_EMAIL` та `IDENTITY_BOOTSTRAP_TEMPORARY_PASSWORD`. Тимчасовий пароль має 12–128 символів. Values і key material не можна commit або log.
 
-The Identity API owns the private key. Gateway, ControlPlane, Orchestrator and
-Integrations receive only a read-only mount of the public key.
+Identity API отримує private key. Gateway, ControlPlane, Orchestrator та Integrations мають лише read-only mount public key.
 
-## Manual signing-key rotation
+```mermaid
+flowchart LR
+    Private["Private RSA key"] --> Identity
+    Identity -->|"підписує RS256 JWT"| Token
+    Public["Public RSA key"] --> Gateway
+    Public --> APIs["Internal APIs"]
+    Gateway -->|"перевіряє"| Token
+    APIs -->|"повторно перевіряють"| Token
+```
 
-Stage 2 deliberately has no partial discovery/JWKS implementation. Rotation
-is a coordinated operation:
+## Ручна ротація signing key
 
-1. Generate a new pair in a protected location.
-2. Change `Authentication:KeyId` and `JwtIssuer:KeyId` to a new unique value.
-3. Stop traffic that creates new sessions.
-4. Replace the public-key mounts on all validators and the private-key mount
-   on Identity.
-5. Restart validators and Identity together.
-6. Verify login and protected API/SignalR/gRPC calls.
-7. Retire the old private key securely.
+Discovery/JWKS і одночасна підтримка кількох keys не реалізовані. Ротація є координованою операцією:
 
-This creates a controlled restart window. Zero-downtime multi-key rotation is
-deferred until a complete OIDC/JWKS solution is adopted.
+1. Згенерувати нову pair у захищеному місці.
+2. Змінити `Authentication:KeyId` і `JwtIssuer:KeyId` на нове унікальне значення.
+3. Зупинити traffic, що створює sessions.
+4. Замінити public-key mounts validators і private-key mount Identity.
+5. Разом перезапустити validators та Identity.
+6. Перевірити login і protected API/SignalR/gRPC calls.
+7. Безпечно утилізувати old private key.
 
-## Bootstrap and secret files
+Це створює контрольоване restart window. Zero-downtime rotation потребуватиме повного OIDC/JWKS рішення.
 
-Bootstrap is idempotent and runs only when no active Admin exists. Production
-should set `IdentityBootstrap:EmailFile` and
-`IdentityBootstrap:TemporaryPasswordFile` to files supplied by the deployment
-secret store. Direct configuration values are intended only for the ignored
-Development `.env`.
+## Bootstrap і secrets
+
+Bootstrap є idempotent і запускається, лише коли немає active Admin. Production має передавати `IdentityBootstrap:EmailFile` і `IdentityBootstrap:TemporaryPasswordFile` через deployment secret store. Прямі configuration values призначені лише для ignored Development `.env`.
 
 ## Data Protection
 
-Docker Development persists ASP.NET Core Data Protection keys in the
-`identity_data_protection` named volume. Production must use durable storage
-shared by all Identity replicas and protect those keys at rest using the
-platform key-management facility. Data Protection files are never source
-artifacts.
+Docker Development зберігає ASP.NET Core Data Protection keys у named volume `identity_data_protection`. Production потребує durable storage, спільного для всіх Identity replicas, і platform key-management protection at rest.
 
-The application process remains the non-root image user (`1654:1654`). A
-one-shot Compose initializer owns the narrow privilege boundary: before
-migrations and Identity start, it assigns the named volume to that user,
-restricts the directory to mode `700`, and existing key files to mode `600`.
-This makes both fresh and reused Docker Desktop/Linux volumes writable without
-running the Identity application as root or using world-writable permissions.
+Application працює як non-root user `1654:1654`. One-shot Compose initializer призначає volume цьому user, каталогові mode `700`, а key files — `600`; Identity не запускається як root і не використовує world-writable permissions.
 
 ## Session behavior
 
-- Access lifetime: at most 10 minutes; clock skew: at most 30 seconds.
-- Refresh family absolute lifetime: at most 30 days.
-- Refresh, logout and cookie-backed session mutation require both a trusted
-  Origin and antiforgery token.
-- Five failed password attempts cause a 15-minute account lockout.
-- Angular uses a same-tab single-flight promise and the browser Web Locks API
-  to serialize refresh across tabs. Browsers without Web Locks retain
-  same-tab single-flight behavior; a genuine cross-tab race is treated as
-  refresh-token reuse and invalidates the family.
+- Access lifetime — не більше 10 хвилин; clock skew — не більше 30 секунд.
+- Absolute lifetime refresh family — не більше 30 днів.
+- Refresh, logout і cookie-based session mutation потребують trusted Origin та antiforgery token.
+- П’ять невдалих password attempts блокують login на 15 хвилин.
+- Angular серіалізує refresh у вкладці й між вкладками через Web Locks. Без Web Locks лишається same-tab single-flight; справжня cross-tab race вважається token reuse і відкликає family.
+
+[Identity](../../src/Services/Identity/README.md) · [Authentication flow](../identity/authentication-flow.md) · [Security Building Block](../security/security-overview.md)

@@ -40,12 +40,12 @@ authorization server.
 
 ## Відповідальність архітектурних шарів
 
-| Шар | Відповідальність | Чого він не повинен робити |
-| --- | --- | --- |
-| `Identity.Api` | HTTP endpoint-и, cookie, CSRF, Origin, authorization, rate limiting і формування відповіді | Не працює напряму з PostgreSQL і не містить основну бізнес-логіку |
-| `Identity.Application` | Координує use cases та залежності через інтерфейси | Не знає деталей EF Core, SQL, RSA і конкретного алгоритму хешування |
-| `Identity.Domain` | Сутності, value objects, бізнес-стан та інваріанти | Не залежить від API та Infrastructure |
-| `Identity.Infrastructure` | EF Core, PostgreSQL, репозиторії, транзакції, JWT, RSA і password hashing | Не визначає HTTP-контракт і не повинна визначати бізнес-процес |
+| Шар                       | Відповідальність                                                                           | Чого він не повинен робити                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `Identity.Api`            | HTTP endpoint-и, cookie, CSRF, Origin, authorization, rate limiting і формування відповіді | Не працює напряму з PostgreSQL і не містить основну бізнес-логіку   |
+| `Identity.Application`    | Координує use cases та залежності через інтерфейси                                         | Не знає деталей EF Core, SQL, RSA і конкретного алгоритму хешування |
+| `Identity.Domain`         | Сутності, value objects, бізнес-стан та інваріанти                                         | Не залежить від API та Infrastructure                               |
+| `Identity.Infrastructure` | EF Core, PostgreSQL, репозиторії, транзакції, JWT, RSA і password hashing                  | Не визначає HTTP-контракт і не повинна визначати бізнес-процес      |
 
 ```mermaid
 flowchart TD
@@ -118,8 +118,10 @@ sequenceDiagram
                     APP->>RT: Add RefreshToken з новою family
                     APP->>UOW: SaveChangesAsync
                     alt Збереження не вдалося
-                        UOW--xAPP: Exception; зміни не фіксуються
-                        API-->>F: 500 ProblemDetails; cookie не записується
+                        UOW-->>APP: Exception
+                        Note over UOW,APP: Зміни не фіксуються
+                        API-->>F: 500 ProblemDetails
+                        Note over API,F: Cookie не записується
                     else Сесію збережено
                         APP->>JWT: Issue(user, roles, now)
                         JWT-->>APP: RS256 access token
@@ -199,7 +201,7 @@ sequenceDiagram
         OF->>API: Invoke endpoint
         API->>AF: ValidateRequestAsync
         alt Antiforgery token невалідний
-            AF--xF: 400 Invalid antiforgery token
+            AF-->>F: 400 Invalid antiforgery token
         else CSRF-перевірка пройдена
             API->>API: Read aicontrolcenter.refresh cookie
             API->>APP: RefreshSessionAsync(raw token)
@@ -219,12 +221,14 @@ sequenceDiagram
                         APP->>REPO: RevokeFamilyAsync (reuse detected)
                         APP->>UOW: SaveChangesAsync
                         UOW->>DB: COMMIT
-                        APP-->>F: 401; family відкликана
+                        APP-->>F: 401 Authentication failed
+                        Note over APP,F: Family відкликана
                     else Token expired, revoked або User не може login
                         APP->>REPO: RevokeFamilyAsync (session invalid)
                         APP->>UOW: SaveChangesAsync
                         UOW->>DB: COMMIT
-                        APP-->>F: 401; family відкликана
+                        APP-->>F: 401 Authentication failed
+                        Note over APP,F: Family відкликана
                     else Token активний
                         APP->>GEN: Generate replacement raw token + hash
                         APP->>APP: current.RotateTo(replacement, now)
@@ -239,7 +243,8 @@ sequenceDiagram
                 end
                 opt Exception до COMMIT
                     UOW->>DB: ROLLBACK
-                    API-->>F: Error response; cookie не замінюється
+                    API-->>F: Error response
+                    Note over API,F: Cookie не замінюється
                 end
             end
         end
@@ -285,13 +290,13 @@ sequenceDiagram
 
 ## Де зберігаються токени
 
-| Значення | Де зберігається | Чи доступне JavaScript | Призначення |
-| --- | --- | --- | --- |
-| Access token | Пам'ять Angular-застосунку в `AccessTokenStore` | Так | Authorization API-запитів і SignalR connection |
-| Raw refresh token | `HttpOnly`, `SameSite=Strict` cookie | Ні | Отримання нового access token |
-| Refresh token hash | PostgreSQL, `identity.refresh_tokens.token_hash` | Не застосовується | Пошук, ротація та відкликання refresh session |
-| RSA private key | Тільки Identity API | Ні | Підпис JWT через `RsaAccessTokenIssuer` |
-| RSA public key | Identity, Gateway, ControlPlane, Orchestrator та Integrations | Ні | Перевірка підпису JWT |
+| Значення           | Де зберігається                                               | Чи доступне JavaScript | Призначення                                    |
+| ------------------ | ------------------------------------------------------------- | ---------------------- | ---------------------------------------------- |
+| Access token       | Пам'ять Angular-застосунку в `AccessTokenStore`               | Так                    | Authorization API-запитів і SignalR connection |
+| Raw refresh token  | `HttpOnly`, `SameSite=Strict` cookie                          | Ні                     | Отримання нового access token                  |
+| Refresh token hash | PostgreSQL, `identity.refresh_tokens.token_hash`              | Не застосовується      | Пошук, ротація та відкликання refresh session  |
+| RSA private key    | Тільки Identity API                                           | Ні                     | Підпис JWT через `RsaAccessTokenIssuer`        |
+| RSA public key     | Identity, Gateway, ControlPlane, Orchestrator та Integrations | Ні                     | Перевірка підпису JWT                          |
 
 ```mermaid
 flowchart LR
@@ -376,7 +381,8 @@ sequenceDiagram
     participant B as Refresh Request B
 
     A->>DB: SELECT token FOR UPDATE
-    DB-->>A: Row lock отримано; token Active
+    DB-->>A: Row lock отримано
+    Note over A,DB: Token має стан Active
     B->>DB: SELECT той самий token FOR UPDATE
     Note over B,DB: Request B очікує
     A->>DB: Revoke Token A, insert Token B, COMMIT
@@ -400,48 +406,48 @@ ROLLBACK, а стан не змінюється. `User.Version`, замапле�
 
 ## Основні класи та інтерфейси
 
-| Компонент | Шар | Роль у процесі |
-| --- | --- | --- |
-| [`IdentityApplicationService`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityApplicationService.cs) | Application | Координує Identity use cases |
-| [`IUserRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Пошук, список, count Admin і додавання users |
-| [`IRoleRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Отримання roles і блокування Admin mutations |
-| [`IRefreshTokenRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Пошук із row lock, додавання та revoke refresh sessions |
-| [`IIdentityUnitOfWork`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Збереження і явні transactions |
-| [`IPasswordHasher`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Hash, verify і timing-safe unknown-user verify |
-| [`IAccessTokenIssuer`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Створення JWT access token |
-| [`IRefreshTokenGenerator`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs) | Application contract | Створення raw token і SHA-256 hash |
-| [`LoginRequestValidator`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityValidators.cs) | Application | Перевірка форми login request |
-| [`AuthSessionResult`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityModels.cs) | Application | Внутрішній результат login/refresh |
-| [`User`](../../src/Services/Identity/AiControlCenter.Identity.Domain/User.cs) | Domain | Login state, password state, roles і status transitions |
-| [`RefreshToken`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs) | Domain | Active/revoked state, rotation і replacement link |
-| [Value objects](../../src/Services/Identity/AiControlCenter.Identity.Domain/ValueObjects.cs) | Domain | Нормалізовані email, role names, token hash і family ID |
-| [`UserRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure | EF Core реалізація `IUserRepository` |
-| [`RoleRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure | EF Core реалізація `IRoleRepository`, `FOR UPDATE` для Admin role |
-| [`RefreshTokenRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure | EF Core/SQL реалізація refresh repository |
-| [`IdentityUnitOfWork`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure | Реалізація save, COMMIT і ROLLBACK |
-| [`PasswordHasherAdapter`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/PasswordHasherAdapter.cs) | Infrastructure | ASP.NET Core Identity V3 hashing, 210000 iterations |
-| [`RsaAccessTokenIssuer`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RsaAccessTokenIssuer.cs) | Infrastructure | Створення і RS256 signing access JWT |
-| [`RefreshTokenGenerator`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RefreshTokenGenerator.cs) | Infrastructure | CSPRNG raw token і SHA-256 hash |
-| [`IdentityDbContext`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityDbContext.cs) | Infrastructure | EF Core unit of persistence для schema `identity` |
-| [`IdentityEndpointExtensions`](../../src/Services/Identity/AiControlCenter.Identity.Api/IdentityEndpointExtensions.cs) | API | HTTP routes, cookie, antiforgery і response mapping |
-| [`ValidationFilter<T>`](../../src/Services/Identity/AiControlCenter.Identity.Api/ValidationFilter.cs) | API | Запускає FluentValidation до use case |
-| [`OriginValidationFilter`](../../src/Services/Identity/AiControlCenter.Identity.Api/OriginValidationFilter.cs) | API | Перевіряє Origin refresh/logout requests |
-| [`IdentityExceptionHandler`](../../src/Services/Identity/AiControlCenter.Identity.Api/IdentityExceptionHandler.cs) | API | Мапить очікувані exceptions у Problem Details |
+| Компонент                                                                                                                           | Шар                  | Роль у процесі                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------- |
+| [`IdentityApplicationService`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityApplicationService.cs)      | Application          | Координує Identity use cases                                      |
+| [`IUserRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                               | Application contract | Пошук, список, count Admin і додавання users                      |
+| [`IRoleRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                               | Application contract | Отримання roles і блокування Admin mutations                      |
+| [`IRefreshTokenRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                       | Application contract | Пошук із row lock, додавання та revoke refresh sessions           |
+| [`IIdentityUnitOfWork`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                           | Application contract | Збереження і явні transactions                                    |
+| [`IPasswordHasher`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                               | Application contract | Hash, verify і timing-safe unknown-user verify                    |
+| [`IAccessTokenIssuer`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                            | Application contract | Створення JWT access token                                        |
+| [`IRefreshTokenGenerator`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                        | Application contract | Створення raw token і SHA-256 hash                                |
+| [`LoginRequestValidator`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityValidators.cs)                   | Application          | Перевірка форми login request                                     |
+| [`AuthSessionResult`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityModels.cs)                           | Application          | Внутрішній результат login/refresh                                |
+| [`User`](../../src/Services/Identity/AiControlCenter.Identity.Domain/User.cs)                                                       | Domain               | Login state, password state, roles і status transitions           |
+| [`RefreshToken`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs)                                       | Domain               | Active/revoked state, rotation і replacement link                 |
+| [Value objects](../../src/Services/Identity/AiControlCenter.Identity.Domain/ValueObjects.cs)                                        | Domain               | Нормалізовані email, role names, token hash і family ID           |
+| [`UserRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs)         | Infrastructure       | EF Core реалізація `IUserRepository`                              |
+| [`RoleRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs)         | Infrastructure       | EF Core реалізація `IRoleRepository`, `FOR UPDATE` для Admin role |
+| [`RefreshTokenRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure       | EF Core/SQL реалізація refresh repository                         |
+| [`IdentityUnitOfWork`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs)     | Infrastructure       | Реалізація save, COMMIT і ROLLBACK                                |
+| [`PasswordHasherAdapter`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/PasswordHasherAdapter.cs)    | Infrastructure       | ASP.NET Core Identity V3 hashing, 210000 iterations               |
+| [`RsaAccessTokenIssuer`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RsaAccessTokenIssuer.cs)      | Infrastructure       | Створення і RS256 signing access JWT                              |
+| [`RefreshTokenGenerator`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RefreshTokenGenerator.cs)    | Infrastructure       | CSPRNG raw token і SHA-256 hash                                   |
+| [`IdentityDbContext`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityDbContext.cs)         | Infrastructure       | EF Core unit of persistence для schema `identity`                 |
+| [`IdentityEndpointExtensions`](../../src/Services/Identity/AiControlCenter.Identity.Api/IdentityEndpointExtensions.cs)              | API                  | HTTP routes, cookie, antiforgery і response mapping               |
+| [`ValidationFilter<T>`](../../src/Services/Identity/AiControlCenter.Identity.Api/ValidationFilter.cs)                               | API                  | Запускає FluentValidation до use case                             |
+| [`OriginValidationFilter`](../../src/Services/Identity/AiControlCenter.Identity.Api/OriginValidationFilter.cs)                      | API                  | Перевіряє Origin refresh/logout requests                          |
+| [`IdentityExceptionHandler`](../../src/Services/Identity/AiControlCenter.Identity.Api/IdentityExceptionHandler.cs)                  | API                  | Мапить очікувані exceptions у Problem Details                     |
 
 ## Типові помилки
 
-| Ситуація | Application exception або механізм | HTTP-статус |
-| --- | --- | --- |
-| Неправильний email/password, blocked user, lockout або invalid refresh token | `IdentityAuthenticationException` | 401 |
-| Немає дозволу на endpoint | ASP.NET Core authorization policy | 403 |
-| `IdentityForbiddenException` | Мапінг у `IdentityExceptionHandler`; поточні use cases його не кидають | 403 |
-| Користувача не знайдено | `IdentityNotFoundException` | 404 |
-| Конфлікт поточного стану або захист останнього Admin | `IdentityConflictException` | 409 |
-| Невалідний request | FluentValidation / `ValidationFilter<T>` | 400 |
-| Невалідний antiforgery token | `AntiforgeryValidationException` | 400 |
-| Відсутній або заборонений Origin | `OriginValidationFilter` | 403 |
-| Перевищено login/refresh rate limit | `identity-auth` fixed-window limiter; custom rejection status не налаштований | 503 (ASP.NET Core default) |
-| Неочікувана database/commit помилка | `GlobalExceptionHandler` | 500 |
+| Ситуація                                                                     | Application exception або механізм                                            | HTTP-статус                |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------- |
+| Неправильний email/password, blocked user, lockout або invalid refresh token | `IdentityAuthenticationException`                                             | 401                        |
+| Немає дозволу на endpoint                                                    | ASP.NET Core authorization policy                                             | 403                        |
+| `IdentityForbiddenException`                                                 | Мапінг у `IdentityExceptionHandler`; поточні use cases його не кидають        | 403                        |
+| Користувача не знайдено                                                      | `IdentityNotFoundException`                                                   | 404                        |
+| Конфлікт поточного стану або захист останнього Admin                         | `IdentityConflictException`                                                   | 409                        |
+| Невалідний request                                                           | FluentValidation / `ValidationFilter<T>`                                      | 400                        |
+| Невалідний antiforgery token                                                 | `AntiforgeryValidationException`                                              | 400                        |
+| Відсутній або заборонений Origin                                             | `OriginValidationFilter`                                                      | 403                        |
+| Перевищено login/refresh rate limit                                          | `identity-auth` fixed-window limiter; custom rejection status не налаштований | 503 (ASP.NET Core default) |
+| Неочікувана database/commit помилка                                          | `GlobalExceptionHandler`                                                      | 500                        |
 
 Для login невідомий email, неправильний password, blocked status і lockout
 навмисно мають однакові status/title, щоб відповідь не пояснювала attacker,

@@ -19,7 +19,7 @@
 - Gateway may reference Contracts, Grpc.Contracts, Observability and Security only.
 - Worker may reference Contracts, Grpc.Contracts and Observability only.
 
-Do not implement a later roadmap stage without an explicit user request. Never add credentials, tokens or private keys to Git.
+Do not implement planned functionality without an explicit user request. Never add credentials, tokens or private keys to Git.
 
 ## Verification
 
@@ -36,4 +36,4 @@ docker compose down
 
 ## Definition of Done
 
-The requested stage is complete only when dependency rules hold, build and relevant tests pass, health checks are configured, Docker and `.env.example` are current, documentation matches the implementation, and no secrets are tracked.
+The requested scope is complete only when dependency rules hold, build and relevant tests pass, health checks are configured, Docker and `.env.example` are current, documentation matches the implementation, and no secrets are tracked.

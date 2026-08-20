@@ -1,59 +1,58 @@
-# AiControlCenterAngular
+# AiControlCenter Angular
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.2.
+Односторінковий Angular-клієнт працює за тим самим origin, що й Nginx/Gateway. Він реалізує вхід, відновлення сесії, зміну тимчасового пароля, захист маршрутів і технічне SignalR-підключення.
 
-## Development server
+## Потік сесії
 
-To start a local development server, run:
-
-```bash
-ng serve
+```mermaid
+sequenceDiagram
+    participant App as Angular
+    participant Gateway
+    participant Identity
+    App->>Gateway: POST /api/identity/v1/auth/login
+    Gateway->>Identity: проксіює login
+    Identity-->>App: access token та HttpOnly refresh cookie
+    App->>Gateway: Bearer access token
+    Gateway-->>App: захищений результат
+    App->>Gateway: POST /api/identity/v1/auth/refresh
+    Gateway->>Identity: cookie та X-XSRF-TOKEN
+    Identity-->>App: новий access token і rotated cookie
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Основні компоненти
 
-## Code scaffolding
+- `AuthStore` ініціалізує CSRF cookie, пробує refresh під час старту, зберігає користувача та координує паралельні refresh-запити.
+- `AccessTokenStore` тримає access token лише в оперативній пам’яті; `localStorage` і `sessionStorage` не використовуються.
+- `authInterceptor` додає Bearer token лише до захищених same-origin API та один раз повторює запит після успішного refresh.
+- `authGuard`, `passwordChangedGuard` і `roleGuard` контролюють маршрути клієнта; серверні policies залишаються остаточним захистом.
+- `RealtimeService` підключається до `/hubs/system`, передає актуальний access token і викликає технічний `Ping`.
+- `LoginComponent`, `ChangePasswordComponent`, `ShellComponent` та `ForbiddenComponent` формують наявний UI.
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Маршрути
 
-```bash
-ng generate component component-name
+| URL                | Компонент і захист                                     |
+| ------------------ | ------------------------------------------------------ |
+| `/login`           | `LoginComponent`, публічний                            |
+| `/change-password` | `ChangePasswordComponent`, `authGuard`                 |
+| `/forbidden`       | `ForbiddenComponent`, `authGuard`                      |
+| `/`                | `ShellComponent`, `authGuard` + `passwordChangedGuard` |
+
+## Запуск і перевірка
+
+Із кореня репозиторію:
+
+```powershell
+npm.cmd ci --prefix .\frontend\ai-control-center-angular
+npm.cmd start --prefix .\frontend\ai-control-center-angular
+npm.cmd test --prefix .\frontend\ai-control-center-angular -- --watch=false
+npm.cmd run build --prefix .\frontend\ai-control-center-angular -- --configuration production
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Тести перевіряють ініціалізацію/refresh сесії, memory-only token, захисні guards та поведінку interceptor без циклу повторних refresh.
 
-```bash
-ng generate --help
-```
+## Пов’язана документація
 
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- [Головний README](../../README.md)
+- [Повний authentication flow](../../docs/identity/authentication-flow.md)
+- [Спільна JWT-безпека](../../docs/security/security-overview.md)
+- [Gateway](../../src/Gateway/AiControlCenter.Gateway/README.md)

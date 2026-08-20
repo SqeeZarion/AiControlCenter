@@ -1,45 +1,45 @@
-# Service boundaries
+# Межі сервісів
+
+```mermaid
+flowchart TB
+    Gateway["Gateway: routing і edge security"]
+    Identity["Identity: users і sessions"]
+    ControlPlane["ControlPlane: isolated owner"]
+    Orchestrator["Orchestrator: isolated owner"]
+    Integrations["Integrations: isolated owner"]
+    Worker["Worker: stateless host"]
+    Gateway --> Identity
+    Gateway --> ControlPlane
+    Gateway --> Orchestrator
+    Gateway --> Integrations
+```
 
 ## Gateway
 
-Public entry point for REST routes and the technical SignalR hub. It does not
-own data or reference service Domain, Application or Infrastructure projects.
-Stage 2 validates Identity-issued JWTs, applies YARP policies and protects the
-SignalR hub. It never references Identity service layers.
+Публічна точка входу для REST і технічного SignalR Hub. Не володіє даними, не посилається на service layers, перевіряє Identity-issued JWT і застосовує YARP policies.
 
 ## Identity
 
-Owns users, fixed system roles, password hashes and rotating refresh-token
-families in the `identity` PostgreSQL schema. It is the only service that has
-the RSA private signing key. Public registration is deliberately absent;
-users are created by Admins.
+Володіє users, fixed system roles, password hashes, rotating refresh-token families та схемою `identity`. Це єдиний сервіс із private signing key. Public registration відсутня; users створює Admin.
 
 ## ControlPlane
 
-Owns the `control_plane` schema and exposes the versioned technical
-`ServiceInfo` gRPC service. Directions, agents, workflows and schedules are
-not implemented. Stage 2 protects the technical gRPC method with delegated
-user authentication.
+Володіє схемою `control_plane` і надає versioned technical `ServiceInfo` gRPC service. Бізнес-entities/use cases ще відсутні; gRPC method захищений delegated user authentication.
 
 ## Orchestrator
 
-Owns the `orchestrator` schema. It has a direct gRPC client to ControlPlane and
-a MassTransit bus connection. Runs, state machines and production messages are
-deferred to Stage 4.
+Володіє схемою `orchestrator`, має direct gRPC client ControlPlane і MassTransit bus connection. Бізнес-оркестрація, state machines та production messages не реалізовані.
 
 ## Worker
 
-Stateless BackgroundService host with MassTransit, observability, liveness and
-readiness. It has no database and no business consumers in Stage 1.
+Stateless `BackgroundService` host з MassTransit, observability, liveness/readiness. Database і business consumers відсутні.
 
 ## Integrations
 
-Owns the `integrations` schema. External API adapters, OAuth accounts and
-provider SDKs are deliberately deferred.
+Володіє схемою `integrations`. External API adapters, OAuth accounts, provider SDKs і business endpoints відсутні.
 
-## Data ownership
+## Власність даних
 
-The Development environment uses one PostgreSQL server, but each data owner
-has a dedicated schema, login role and connection string. A role receives no
-privileges on another service's schema. Cross-service reads must use versioned
-REST, gRPC or message contracts.
+Development використовує один PostgreSQL server, але кожен data owner має окрему schema, login role і connection string. Role не отримує privileges на чужу schema. Cross-service reads можливі лише через versioned REST, gRPC або message contracts.
+
+[Сервіси](../../src/Services/README.md) · [Правила залежностей](dependency-rules.md) · [Комунікація](communication.md)

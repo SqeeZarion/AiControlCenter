@@ -1,31 +1,26 @@
-# Dependency rules
+# Правила залежностей
 
-Allowed references inside a service:
+Дозволені напрямки всередині одного сервісу:
 
-```text
-Domain          <- Application
-Domain          <- Infrastructure
-Application     <- Infrastructure
-Application     <- Api
-Infrastructure  <- Api
+```mermaid
+flowchart BT
+    Application --> Domain
+    Infrastructure --> Domain
+    Infrastructure --> Application
+    Api --> Application
+    Api --> Infrastructure
 ```
 
-- Domain has no project dependencies and no EF Core, ASP.NET Core,
-  MassTransit or external SDK packages.
-- Application references only its own Domain.
-- Infrastructure references only its own Application and Domain.
-- API references its own Application and Infrastructure plus technical
-  BuildingBlocks where needed.
-- Gateway may reference Contracts, Grpc.Contracts, Observability and the
-  technical Security building block, but not service layers.
-- Worker may reference Contracts, Grpc.Contracts and Observability, but not
-  service layers.
-- A service may not reference another service's Domain, Application or
-  Infrastructure.
-- BuildingBlocks contain transport contracts and technical defaults, never
-  shared domain entities. `AiControlCenter.Security` is limited to JWT
-  validation, claim/policy names, SignalR token extraction and endpoint
-  authorization helpers.
+- Domain не має project dependencies і не використовує EF Core, ASP.NET Core, MassTransit або зовнішні SDK.
+- Application посилається лише на власний Domain.
+- Infrastructure посилається лише на власні Application та Domain.
+- API посилається на власні Application/Infrastructure і потрібні технічні Building Blocks.
+- Сервіс не може посилатися на Domain, Application або Infrastructure іншого сервісу.
+- Gateway може посилатися лише на Contracts, Grpc.Contracts, Observability і Security.
+- Worker може посилатися лише на Contracts, Grpc.Contracts і Observability.
+- Building Blocks містять transport contracts і технічні defaults, але не спільні domain entities.
+- `AiControlCenter.Security` обмежений JWT validation, claim/policy names, SignalR token extraction та endpoint authorization helpers.
 
-`AiControlCenter.ArchitectureTests` validates project references and banned
-package references directly from the project files, including empty layers.
+`AiControlCenter.ArchitectureTests` читає project/package references безпосередньо з `.csproj`, зокрема для порожніх шарів, і перевіряє ці правила на Windows та Linux.
+
+[Architecture tests](../../tests/Architecture/AiControlCenter.ArchitectureTests/README.md) · [Building Blocks](../../src/BuildingBlocks/README.md) · [Межі сервісів](service-boundaries.md)
