@@ -6,6 +6,7 @@ using AppPasswordVerificationResult = AiControlCenter.Identity.Application.Passw
 
 namespace AiControlCenter.Identity.Infrastructure.Security;
 
+//Хешує і перевіряє паролі користувачів
 internal sealed class PasswordHasherAdapter : IPasswordHasher
 {
     private readonly PasswordHasher<User> hasher = new(Options.Create(new PasswordHasherOptions

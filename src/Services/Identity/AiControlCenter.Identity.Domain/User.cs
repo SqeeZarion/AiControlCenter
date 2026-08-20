@@ -34,6 +34,7 @@ public sealed class User
 
     public UserStatus Status { get; private set; }
 
+    //Показує, чи повинен користувач змінити тимчасовий пароль.
     public bool MustChangePassword { get; private set; }
 
     public int AccessFailedCount { get; private set; }
@@ -60,11 +61,14 @@ public sealed class User
         DateTimeOffset createdAt) =>
         new(Guid.NewGuid(), email, displayName, passwordHash, mustChangePassword, createdAt);
 
+    //Перевірка можливості входу
     public bool CanLogin(DateTimeOffset now) =>
         Status == UserStatus.Active && (LockoutEnd is null || LockoutEnd <= now);
 
+    //Невдала спроба входу
     public void RecordFailedLogin(DateTimeOffset now, int maximumAttempts, TimeSpan lockoutDuration)
     {
+        //потрібен, щоб порахувати неправильні введення пароля й тимчасово заблокувати вхід після заданої кількості помилок.
         AccessFailedCount++;
         UpdatedAt = now;
         if (AccessFailedCount >= maximumAttempts)
@@ -89,12 +93,14 @@ public sealed class User
         UpdatedAt = now;
     }
 
+    //блкує користувача
     public void Block(DateTimeOffset now)
     {
         Status = UserStatus.Blocked;
         UpdatedAt = now;
     }
 
+    //зміна пароля
     public void ChangePassword(string passwordHash, bool mustChangePassword, DateTimeOffset now)
     {
         PasswordHash = RequirePasswordHash(passwordHash);
@@ -104,8 +110,10 @@ public sealed class User
         UpdatedAt = now;
     }
 
+    //зміна ролей
     public void ReplaceRoles(IEnumerable<Role> roles, DateTimeOffset now)
     {
+        //отримуєм унікальний айді користувача
         var roleIds = roles.Select(role => role.Id).Distinct().ToArray();
         if (roleIds.Length == 0)
         {
@@ -121,8 +129,10 @@ public sealed class User
         UpdatedAt = now;
     }
 
+    //
     public bool HasRole(Guid roleId) => UserRoles.Any(userRole => userRole.RoleId == roleId);
 
+    //хешування пароля
     private static string RequirePasswordHash(string value) =>
         string.IsNullOrWhiteSpace(value)
             ? throw new ArgumentException("Password hash is required.", nameof(value))

@@ -2,6 +2,8 @@ using System.Net.Mail;
 
 namespace AiControlCenter.Identity.Domain;
 
+//нормалізація обєктів, Value Object — це спеціальний тип для зберігання певного значення разом із правилами цього значення.
+
 public sealed record Email
 {
     private Email(string value) => Value = value;
@@ -85,6 +87,7 @@ public sealed record RefreshTokenHash
     public override string ToString() => Value;
 }
 
+//Це value object, який створюється 1 раз
 public readonly record struct RefreshTokenFamilyId
 {
     public RefreshTokenFamilyId(Guid value)

@@ -290,6 +290,7 @@ public sealed class IdentityApplicationService(
             var user = await users.GetByEmailAsync(email, transactionCancellationToken);
             if (user is null)
             {
+                //створюється користувач
                 user = User.Create(
                     email,
                     DisplayName.Create(displayName),

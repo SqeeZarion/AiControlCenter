@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace AiControlCenter.Identity.Infrastructure.Security;
 
+//Генерує довгий випадковий refresh token та його SHA-256 hash
 internal sealed class RefreshTokenGenerator : IRefreshTokenGenerator
 {
     public GeneratedRefreshToken Generate()

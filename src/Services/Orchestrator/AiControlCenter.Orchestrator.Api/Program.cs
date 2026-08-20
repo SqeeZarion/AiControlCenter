@@ -10,6 +10,7 @@ using Grpc.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
+//підключає спільні можливості сервісів
 builder.AddServiceDefaults();
 builder.Services.AddApiFoundation();
 //Метод реєструє повну JWT authentication для поточного сервісу.

@@ -25,6 +25,7 @@ public sealed class Role
 
     public ICollection<UserRole> UserRoles { get; private set; } = [];
 
+    //Це готова колекція ролей, яку Infrastructure може використати для seed PostgreSQL.
     public static IReadOnlyCollection<Role> SystemRoles { get; } =
     [
         new(AdminId, RoleName.Admin, "Full platform administration."),

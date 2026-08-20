@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AiControlCenter.Identity.Api;
 
+//перехоплює відомі винятки й перетворює їх на нормальну HTTP-відповідь у форматі JSON.
 public sealed partial class IdentityExceptionHandler(ILogger<IdentityExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(

@@ -1,5 +1,6 @@
 namespace AiControlCenter.Identity.Api;
 
+//Цей фільтр перевіряє, з якого сайту прийшов HTTP-запит. Він дозволяє виконувати endpoint тільки запитам від дозволеного frontend.
 public sealed class OriginValidationFilter(IConfiguration configuration) : IEndpointFilter
 {
     private readonly HashSet<string> allowedOrigins = configuration
