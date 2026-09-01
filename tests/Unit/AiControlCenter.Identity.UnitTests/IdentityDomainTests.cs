@@ -47,28 +47,39 @@ public sealed class IdentityDomainTests
     }
 
     [Fact]
-    public void RefreshTokenRotationRevokesOriginalAndLinksReplacement()
+    public void RefreshTokenRotationUsesOneSessionAndLinksReplacement()
     {
         var now = new DateTimeOffset(2026, 8, 3, 12, 0, 0, TimeSpan.Zero);
-        var family = RefreshTokenFamilyId.New();
+        var session = RefreshSession.Create(Guid.NewGuid(), now, now.AddDays(30), "127.0.0.1", "tests");
         var original = RefreshToken.Create(
-            Guid.NewGuid(),
+            session.Id,
             RefreshTokenHash.Create(new string('A', 64)),
-            family,
             now,
             now.AddDays(30));
         var replacement = RefreshToken.Create(
-            original.UserId,
+            session.Id,
             RefreshTokenHash.Create(new string('B', 64)),
-            family,
             now.AddMinutes(1),
             now.AddDays(30));
 
         original.RotateTo(replacement, now.AddMinutes(1));
 
-        Assert.False(original.IsActive(now.AddMinutes(2)));
+        Assert.False(original.IsCurrent(now.AddMinutes(2)));
+        Assert.NotNull(original.UsedAt);
         Assert.Equal(replacement.Id, original.ReplacedByTokenId);
-        Assert.True(replacement.IsActive(now.AddMinutes(2)));
+        Assert.True(replacement.IsCurrent(now.AddMinutes(2)));
+    }
+
+    [Fact]
+    public void RevokedRefreshSessionCannotBeUsed()
+    {
+        var now = new DateTimeOffset(2026, 8, 3, 12, 0, 0, TimeSpan.Zero);
+        var session = RefreshSession.Create(Guid.NewGuid(), now, now.AddDays(30), null, null);
+
+        session.Revoke(now.AddMinutes(1), "logout");
+
+        Assert.False(session.IsActive(now.AddMinutes(2)));
+        Assert.Throws<InvalidOperationException>(() => session.RecordUse(now.AddMinutes(2)));
     }
 
     private static User CreateUser(DateTimeOffset now) => User.Create(

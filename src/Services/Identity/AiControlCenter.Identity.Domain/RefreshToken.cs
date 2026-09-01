@@ -9,9 +9,8 @@ public sealed class RefreshToken
 
     private RefreshToken(
         Guid id,
-        Guid userId,
+        Guid sessionId,
         RefreshTokenHash tokenHash,
-        RefreshTokenFamilyId familyId,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt)
     {
@@ -21,73 +20,50 @@ public sealed class RefreshToken
         }
 
         Id = id;
-        UserId = userId;
+        SessionId = sessionId;
         TokenHash = tokenHash;
-        FamilyId = familyId;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
     }
 
     public Guid Id { get; private set; }
 
-    public Guid UserId { get; private set; }
+    public Guid SessionId { get; private set; }
 
     //Ідентифікатор користувача, якому належить сесія.
     public RefreshTokenHash TokenHash { get; private set; } = null!;
 
-    //Ідентифікатор сім’ї токенів. Усі токени, створені під час послідовних refresh, належать до однієї family
-    public RefreshTokenFamilyId FamilyId { get; private set; }
-
-    //Час створення та завершення дії.
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset ExpiresAt { get; private set; }
 
-    //Час відкликання токена.
-    public DateTimeOffset? RevokedAt { get; private set; }
-
-    //Причина відкликання:
-    public string? RevocationReason { get; private set; }
+    public DateTimeOffset? UsedAt { get; private set; }
 
     //Посилання на токен, який замінив поточний.
     public Guid? ReplacedByTokenId { get; private set; }
 
-    public User User { get; private set; } = null!;
+    public RefreshSession Session { get; private set; } = null!;
 
     public RefreshToken? ReplacedByToken { get; private set; }
 
     public static RefreshToken Create(
-        Guid userId,
+        Guid sessionId,
         RefreshTokenHash hash,
-        RefreshTokenFamilyId familyId,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt) =>
-        new(Guid.NewGuid(), userId, hash, familyId, createdAt, expiresAt);
+        new(Guid.NewGuid(), sessionId, hash, createdAt, expiresAt);
 
-    //Перевірка активності Він не відкликаний. Його строк дії ще не завершився.
-    public bool IsActive(DateTimeOffset now) => RevokedAt is null && ExpiresAt > now;
+    public bool IsCurrent(DateTimeOffset now) =>
+        UsedAt is null && ReplacedByTokenId is null && ExpiresAt > now;
 
     //Метод замінює старий refresh-токен новим.
     public void RotateTo(RefreshToken replacement, DateTimeOffset now)
     {
-        if (!IsActive(now) || replacement.FamilyId != FamilyId || replacement.UserId != UserId)
+        if (!IsCurrent(now) || replacement.SessionId != SessionId)
         {
             throw new InvalidOperationException("Refresh token cannot be rotated.");
         }
 
-        RevokedAt = now;
-        RevocationReason = "Rotated";
+        UsedAt = now;
         ReplacedByTokenId = replacement.Id;
-    }
-
-    //Звичайне відкликання, викликається коли заблокований користувач
-    public void Revoke(DateTimeOffset now, string reason)
-    {
-        if (RevokedAt is not null)
-        {
-            return;
-        }
-
-        RevokedAt = now;
-        RevocationReason = string.IsNullOrWhiteSpace(reason) ? "Revoked" : reason.Trim();
     }
 }

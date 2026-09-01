@@ -10,7 +10,7 @@ flowchart LR
 ```
 
 - `IdentityDomainTests` перевіряє value objects і переходи стану refresh/user.
-- `IdentitySecurityTests` перевіряє Argon2id та межі RS256 access token/claims.
+- `IdentitySecurityTests` перевіряє IdentityV3 PBKDF2 та межі RS256 access token/claims.
 - `LastAdminTests` перевіряє заборону блокування останнього активного Admin.
 
 Посилається на Identity Domain/Application/Infrastructure; використовує xUnit і test SDK.

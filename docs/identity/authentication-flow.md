@@ -58,7 +58,7 @@ flowchart TD
 ```
 
 Dependency Inversion полягає в тому, що `Identity.Application` знає лише
-`IUserRepository`, `IRefreshTokenRepository`, `IIdentityUnitOfWork`,
+`IUserRepository`, `IRefreshSessionRepository`, `IIdentityUnitOfWork`,
 `IPasswordHasher`, `IAccessTokenIssuer` та інші contracts. Infrastructure
 залежить від Application і реалізує ці contracts. Domain не посилається ні на
 Infrastructure, ні на API.
@@ -79,7 +79,7 @@ sequenceDiagram
     participant UR as IUserRepository
     participant PH as IPasswordHasher
     participant D as User / Email
-    participant RT as Refresh token ports
+    participant RT as Refresh session/token ports
     participant UOW as IIdentityUnitOfWork
     participant JWT as IAccessTokenIssuer
 
@@ -91,7 +91,7 @@ sequenceDiagram
     else Форма request валідна
         VF->>APP: LoginAsync(request)
         APP->>D: Email.Create(request.Email)
-        APP->>UR: GetByEmailAsync(email)
+        APP->>UR: GetByEmailForAuthenticationAsync(email)
         alt Користувача не знайдено
             APP->>PH: VerifyUnknown(password)
             APP-->>API: IdentityAuthenticationException
@@ -104,18 +104,19 @@ sequenceDiagram
             else Login дозволено
                 APP->>PH: Verify(passwordHash, password)
                 alt Пароль неправильний
-                    APP->>D: RecordFailedLogin
-                    APP->>UOW: SaveChangesAsync
+                    APP->>UR: RecordFailedLoginAsync (atomic UPDATE RETURNING)
                     APP-->>API: IdentityAuthenticationException
                     API-->>F: 401 Authentication failed
                 else Пароль правильний
+                    APP->>UOW: ExecuteInTransactionAsync
+                    APP->>UR: GetByIdForUpdateAsync (FOR UPDATE)
+                    APP->>APP: Re-check state і unchanged password hash
                     opt SuccessRehashNeeded
                         APP->>PH: Hash(password)
                         APP->>D: ChangePassword(newHash, MustChangePassword, now)
                     end
                     APP->>D: RecordSuccessfulLogin(now)
-                    APP->>RT: Generate raw token і SHA-256 hash
-                    APP->>RT: Add RefreshToken з новою family
+                    APP->>RT: Create RefreshSession + current token hash
                     APP->>UOW: SaveChangesAsync
                     alt Збереження не вдалося
                         UOW-->>APP: Exception
@@ -125,6 +126,8 @@ sequenceDiagram
                     else Сесію збережено
                         APP->>JWT: Issue(user, roles, now)
                         JWT-->>APP: RS256 access token
+                        APP-->>UOW: AuthSessionResult
+                        UOW->>UOW: COMMIT
                         APP-->>API: AuthSessionResult
                         API->>API: SetRefreshCookie(raw token)
                         API-->>F: 200 accessToken, expiresInSeconds, user
@@ -143,34 +146,33 @@ sequenceDiagram
 3. `IdentityApplicationService.LoginAsync` створює `Email` через
    `Email.Create`: значення обрізається, переводиться в lower case і повторно
    перевіряється як email.
-4. `IUserRepository.GetByEmailAsync` шукає user разом із ролями. Реалізація
-   `UserRepository` виконує запит через EF Core.
+4. `IUserRepository.GetByEmailForAuthenticationAsync` читає snapshot user із
+   ролями без tracking і без row lock, щоб password hashing не тримав lock.
 5. Якщо user не знайдений, `IPasswordHasher.VerifyUnknown` все одно виконує
    перевірку dummy hash. Це зменшує різницю часу між невідомим email і
    неправильним паролем. В обох випадках назовні повертається однаковий `401`.
 6. `User.CanLogin` дозволяє login лише для `UserStatus.Active`, коли
    `LockoutEnd` відсутній або завершився. Blocked і temporarily locked user
    отримують загальний `401` без розкриття причини.
-7. `IPasswordHasher.Verify` перевіряє hash. Неправильний пароль викликає
-   `User.RecordFailedLogin`; п'ята невдала спроба встановлює 15-хвилинний
-   lockout. Стан зберігається перед поверненням `401`.
-8. Якщо hasher повертає `SuccessRehashNeeded`, Application створює новий hash
-   і викликає `User.ChangePassword`, зберігаючи поточне значення
-   `MustChangePassword`. Потім `RecordSuccessfulLogin` скидає failed count і
-   lockout та записує `LastLoginAt`.
+7. `IPasswordHasher.Verify` перевіряє IdentityV3 PBKDF2 hash. Для неправильного
+   password `RecordFailedLoginAsync` виконує параметризований PostgreSQL
+   `UPDATE ... RETURNING`: concurrent attempts не гублять increments, п'ята
+   спроба ставить 15-хвилинний lockout, а очікуваний conflict не стає `500`.
+8. Після успішної перевірки Application відкриває transaction, блокує current
+   user row через `FOR UPDATE` і повторно перевіряє status, lockout та незмінний
+   password hash. Тільки тоді можливий rehash і `RecordSuccessfulLogin`, який
+   скидає failed count та записує `LastLoginAt`.
 9. `IRefreshTokenGenerator.Generate` створює 32 cryptographically random bytes,
    кодує raw token як Base64Url і одразу обчислює SHA-256 hash.
-10. `RefreshToken.Create` створює нову `RefreshTokenFamilyId` з абсолютним
-    строком життя 30 днів. `IRefreshTokenRepository.Add` додає до DbContext
-    лише hash та metadata сесії.
-11. Один `SaveChangesAsync` фіксує login state, можливий rehash і refresh
-    session. У login немає явного `ExecuteInTransactionAsync`; EF Core
-    використовує транзакцію для одного `SaveChanges`. Якщо збереження падає,
-    помилка доходить до `GlobalExceptionHandler` як `500`, а API не встигає
-    записати refresh-cookie.
-12. Лише після успішного збереження `IAccessTokenIssuer.Issue` створює JWT,
-    `AuthSessionResult` повертає access token, user DTO, raw refresh token і
-    refresh expiration до API.
+10. Один login створює стабільну `RefreshSession` з absolute lifetime 30 днів,
+    client IP/User-Agent metadata та один current `RefreshToken`. У DbContext
+    додається лише SHA-256 hash, raw token залишається в пам'яті до cookie.
+11. `SaveChangesAsync` і COMMIT атомарно фіксують successful-login state,
+    можливий rehash, session і token. Якщо operation або COMMIT падає, Unit of
+    Work робить ROLLBACK, API повертає `500` і не записує refresh-cookie.
+12. Після успішного `SaveChangesAsync` `IAccessTokenIssuer.Issue` формує JWT
+    у пам'яті. Unit of Work повертає `AuthSessionResult` до API лише після
+    успішного COMMIT; commit failure не видає cookie або token клієнтові.
 13. API записує raw refresh token у `HttpOnly`, `SameSite=Strict` cookie з
     path `/api/identity/v1/auth`, а в JSON повертає лише access token,
     `expiresInSeconds` і user. Refresh token у response body відсутній.
@@ -190,7 +192,7 @@ sequenceDiagram
     participant APP as IdentityApplicationService
     participant GEN as IRefreshTokenGenerator
     participant UOW as IIdentityUnitOfWork
-    participant REPO as IRefreshTokenRepository
+    participant REPO as IRefreshSessionRepository
     participant DB as PostgreSQL
     participant JWT as IAccessTokenIssuer
 
@@ -211,24 +213,24 @@ sequenceDiagram
                 APP->>GEN: Hash(raw token)
                 APP->>UOW: ExecuteInTransactionAsync
                 UOW->>DB: BEGIN
-                APP->>REPO: GetByHashForUpdateAsync(hash)
-                REPO->>DB: SELECT ... FOR UPDATE
+                APP->>REPO: GetByTokenHashForUpdateAsync(hash)
+                REPO->>DB: Find SessionId, SELECT RefreshSession FOR UPDATE
                 alt Token не знайдений
                     UOW->>DB: COMMIT без змін
                     APP-->>F: 401 Authentication failed
-                else Token row заблоковано
-                    alt ReplacedByTokenId вже встановлено
-                        APP->>REPO: RevokeFamilyAsync (reuse detected)
+                else Stable Session row заблоковано
+                    alt UsedAt або ReplacedByTokenId встановлено
+                        APP->>APP: Revoke whole RefreshSession (reuse)
                         APP->>UOW: SaveChangesAsync
                         UOW->>DB: COMMIT
                         APP-->>F: 401 Authentication failed
-                        Note over APP,F: Family відкликана
-                    else Token expired, revoked або User не може login
-                        APP->>REPO: RevokeFamilyAsync (session invalid)
+                        Note over APP,F: Session відкликана
+                    else Session/token expired, revoked або User не може login
+                        APP->>APP: Revoke whole RefreshSession
                         APP->>UOW: SaveChangesAsync
                         UOW->>DB: COMMIT
                         APP-->>F: 401 Authentication failed
-                        Note over APP,F: Family відкликана
+                        Note over APP,F: Session відкликана
                     else Token активний
                         APP->>GEN: Generate replacement raw token + hash
                         APP->>APP: current.RotateTo(replacement, now)
@@ -268,20 +270,19 @@ sequenceDiagram
 5. `IRefreshTokenGenerator.Hash` обчислює SHA-256 raw token. Raw значення не
    використовується в SQL.
 6. `IIdentityUnitOfWork.ExecuteInTransactionAsync` відкриває transaction.
-   `GetByHashForUpdateAsync` виконує `SELECT ... FOR UPDATE`, завантажуючи
-   refresh token, user і ролі та блокуючи рядок до COMMIT/ROLLBACK.
+   `GetByTokenHashForUpdateAsync` спочатку знаходить `SessionId`, а потім
+   виконує `SELECT ... FOR UPDATE` саме стабільного `RefreshSession` row.
+   Token, user і roles читаються під цим lock до COMMIT/ROLLBACK.
 7. Якщо hash не знайдений, operation повертає invalid outcome. Транзакція
    завершується без змін, після чого Application повертає загальний `401`.
-8. Якщо `ReplacedByTokenId` уже встановлений, старий token повторно
-   використали. `RevokeFamilyAsync` відкликає всі ще активні записи family,
-   зміни зберігаються і commit виконують до повернення `401`.
-9. Прострочений, відкликаний token або user, який більше не може login,
-   проходить через іншу invalid-гілку. Family також відкликається і запит
-   завершується `401`.
+8. Якщо `UsedAt` або `ReplacedByTokenId` уже встановлено, старий token повторно
+   використали. Domain відкликає весь `RefreshSession`; commit обов'язково
+   завершується до повернення `401`.
+9. Прострочена/відкликана session, invalid token або user, який більше не може
+   login, також відкликає весь session aggregate і завершується `401`.
 10. Для активного token `Generate` створює replacement. `RefreshToken.RotateTo`
-    відкликає старий запис із reason `Rotated` та встановлює
-    `ReplacedByTokenId`; replacement успадковує ту саму family і початковий
-    абсолютний `ExpiresAt`.
+    записує старому token `UsedAt` та `ReplacedByTokenId`; replacement належить
+    тому самому `RefreshSession` і успадковує його absolute `ExpiresAt`.
 11. Новий hash додається в PostgreSQL, `SaveChangesAsync` виконується всередині
     transaction, а `IAccessTokenIssuer` створює новий access token.
 12. Після успішного COMMIT API замінює refresh-cookie та повертає access token
@@ -331,21 +332,20 @@ Identity для ротації.
 
 ```mermaid
 flowchart LR
-    A["Token A<br/>Active"] -->|"refresh"| AR["Token A<br/>Revoked, replaced by B"]
-    AR --> B["Token B<br/>Active"]
-    B -->|"refresh"| BR["Token B<br/>Revoked, replaced by C"]
-    BR --> C["Token C<br/>Active"]
-    A -.->|"повторне використання"| R["Revoke active tokens<br/>у всій family"]
+    S["RefreshSession S<br/>stable lock row"] --> A["Token A<br/>used, replaced by B"]
+    S --> B["Token B<br/>current"]
+    B -->|"refresh"| C["Token C<br/>current"]
+    A -.->|"replay або logout"| R["Revoke Session S"]
     R -.-> C
 ```
 
-- Token A після першого використання отримує `RevokedAt`, reason `Rotated` і
-  посилання `ReplacedByTokenId` на Token B.
+- Token A після першого використання отримує `UsedAt` і посилання
+  `ReplacedByTokenId` на Token B.
 - Browser отримує raw Token B; у БД зберігається лише його hash.
-- Token B зберігає `FamilyId` і абсолютний `ExpiresAt` Token A. Rotation не
-  створює нескінченну sliding session.
-- Повторне використання Token A розпізнається за `ReplacedByTokenId` і
-  відкликає всі ще активні tokens тієї самої family.
+- Token B зберігає `SessionId`; absolute `ExpiresAt` належить session і rotation
+  не створює нескінченну sliding session.
+- Повторне використання або logout із Token A блокує стабільний session row і
+  відкликає всю session, тому Token B більше не може виконати refresh.
 
 ## Повторне використання токена
 
@@ -353,15 +353,15 @@ Reuse може означати, що старе cookie викрали, або �
 одночасно використали той самий token. Система навмисно обирає fail-closed
 поведінку:
 
-1. знаходить старий token за hash і блокує його row;
-2. бачить `ReplacedByTokenId`;
-3. викликає `RevokeFamilyAsync` із reason `Refresh token reuse detected`;
+1. знаходить старий token за hash і визначає його `SessionId`;
+2. блокує стабільний `RefreshSession` row та бачить `UsedAt`/replacement;
+3. викликає `RefreshSession.Revoke` з reason `Refresh token reuse detected`;
 4. зберігає відкликання та виконує COMMIT;
-5. повертає `401`, не видаючи нову session.
+5. повертає `401`, не видаючи нового token.
 
 Angular зменшує випадкові races через same-tab `refreshPromise` та browser Web
 Locks API з ім'ям `aicontrolcenter-refresh`. У browser без Web Locks справжній
-cross-tab race усе одно трактується як reuse і відкликає family.
+cross-tab race усе одно трактується як reuse і відкликає session.
 
 ## Транзакції та блокування
 
@@ -371,8 +371,9 @@ cross-tab race усе одно трактується як reuse і відкли
 - `ExecuteInTransactionAsync<T>` виконує operation між `BEGIN` і `COMMIT`, а
   при exception викликає `ROLLBACK` та повторно кидає exception.
 
-`GetByHashForUpdateAsync` виконує PostgreSQL `SELECT ... FOR UPDATE`. Row lock
-не дозволяє двом транзакціям одночасно побачити один refresh token активним.
+`GetByTokenHashForUpdateAsync` визначає `SessionId` за token hash і виконує
+PostgreSQL `SELECT ... FOR UPDATE` для стабільного `RefreshSession` row. Той
+самий lock використовують refresh, logout і replay detection.
 
 ```mermaid
 sequenceDiagram
@@ -380,21 +381,28 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant B as Refresh Request B
 
-    A->>DB: SELECT token FOR UPDATE
-    DB-->>A: Row lock отримано
+    A->>DB: SELECT RefreshSession S FOR UPDATE
+    DB-->>A: Stable session lock отримано
     Note over A,DB: Token має стан Active
-    B->>DB: SELECT той самий token FOR UPDATE
+    B->>DB: SELECT Session S FOR UPDATE
     Note over B,DB: Request B очікує
-    A->>DB: Revoke Token A, insert Token B, COMMIT
+    A->>DB: Mark Token A used, insert Token B, COMMIT
     DB-->>B: Lock отримано після COMMIT A
-    B->>DB: Читає ReplacedByTokenId і відкликає family
+    B->>DB: Читає Token A та відкликає Session S
     B->>DB: COMMIT
     DB-->>B: Request B завершується 401
 ```
 
 Без row lock обидва requests могли б прочитати Token A як active і створити
-дві replacement-гілки. З lock Request B читає вже оновлений стан і переходить
-у reuse detection.
+дві replacement-гілки. Stable session lock також усуває race, у якому logout
+старим Token A міг не побачити Token B: незалежно від порядку обидві операції
+серіалізуються на Session S, і logout відкликає весь aggregate.
+
+Failed login не використовує optimistic read/modify/write: один параметризований
+`UPDATE ... RETURNING` атомарно збільшує count і ставить lockout. Change/reset
+password блокують current user row і в одній transaction змінюють password
+state та відкликають усі active `RefreshSession`; помилка будь-якої частини
+rollback-ить обидві.
 
 `AcquireAdminMutationLockAsync` використовує `SELECT` ролі `Admin` із
 `FOR UPDATE`. Один стабільний row серіалізує `BlockUserAsync`,
@@ -411,7 +419,7 @@ ROLLBACK, а стан не змінюється. `User.Version`, замапле�
 | [`IdentityApplicationService`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityApplicationService.cs)      | Application          | Координує Identity use cases                                      |
 | [`IUserRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                               | Application contract | Пошук, список, count Admin і додавання users                      |
 | [`IRoleRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                               | Application contract | Отримання roles і блокування Admin mutations                      |
-| [`IRefreshTokenRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                       | Application contract | Пошук із row lock, додавання та revoke refresh sessions           |
+| [`IRefreshSessionRepository`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                     | Application contract | Stable-session row lock, додавання та revoke refresh sessions     |
 | [`IIdentityUnitOfWork`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                           | Application contract | Збереження і явні transactions                                    |
 | [`IPasswordHasher`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                               | Application contract | Hash, verify і timing-safe unknown-user verify                    |
 | [`IAccessTokenIssuer`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs)                            | Application contract | Створення JWT access token                                        |
@@ -419,11 +427,12 @@ ROLLBACK, а стан не змінюється. `User.Version`, замапле�
 | [`LoginRequestValidator`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityValidators.cs)                   | Application          | Перевірка форми login request                                     |
 | [`AuthSessionResult`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityModels.cs)                           | Application          | Внутрішній результат login/refresh                                |
 | [`User`](../../src/Services/Identity/AiControlCenter.Identity.Domain/User.cs)                                                       | Domain               | Login state, password state, roles і status transitions           |
-| [`RefreshToken`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs)                                       | Domain               | Active/revoked state, rotation і replacement link                 |
-| [Value objects](../../src/Services/Identity/AiControlCenter.Identity.Domain/ValueObjects.cs)                                        | Domain               | Нормалізовані email, role names, token hash і family ID           |
+| [`RefreshSession`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshSession.cs)                                   | Domain               | Stable aggregate, lifetime, client metadata і revocation state    |
+| [`RefreshToken`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs)                                       | Domain               | One-time use state та replacement link                            |
+| [Value objects](../../src/Services/Identity/AiControlCenter.Identity.Domain/ValueObjects.cs)                                        | Domain               | Нормалізовані email, role names і token hash                      |
 | [`UserRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs)         | Infrastructure       | EF Core реалізація `IUserRepository`                              |
 | [`RoleRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs)         | Infrastructure       | EF Core реалізація `IRoleRepository`, `FOR UPDATE` для Admin role |
-| [`RefreshTokenRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure       | EF Core/SQL реалізація refresh repository                         |
+| [`RefreshSessionRepository`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs) | Infrastructure     | EF Core/SQL реалізація stable-session repository                  |
 | [`IdentityUnitOfWork`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs)     | Infrastructure       | Реалізація save, COMMIT і ROLLBACK                                |
 | [`PasswordHasherAdapter`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/PasswordHasherAdapter.cs)    | Infrastructure       | ASP.NET Core Identity V3 hashing, 210000 iterations               |
 | [`RsaAccessTokenIssuer`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RsaAccessTokenIssuer.cs)      | Infrastructure       | Створення і RS256 signing access JWT                              |
@@ -463,10 +472,10 @@ ROLLBACK, а стан не змінюється. `User.Version`, замапле�
 - Raw refresh token зберігається тільки в HttpOnly cookie.
 - У PostgreSQL зберігається лише hash refresh token.
 - Refresh виконується у transaction з row lock.
-- Старий refresh token відкликається під час rotation.
-- Повторне використання token відкликає всю активну family.
-- Login використовує один `SaveChangesAsync`, а не явний
-  `ExecuteInTransactionAsync`.
+- Старий refresh token отримує `UsedAt` під час rotation.
+- Повторне використання token або logout старим token відкликає всю session.
+- Login повторно блокує/перевіряє user і створює session в явній transaction.
+- Неправильний login зараховується atomic `UPDATE ... RETURNING`.
 
 ## Як читати код Login
 
@@ -474,7 +483,7 @@ ROLLBACK, а стан не змінюється. `User.Version`, замапле�
 2. Endpoint validation adapter: [`ValidationFilter.cs`](../../src/Services/Identity/AiControlCenter.Identity.Api/ValidationFilter.cs).
 3. Форма request: [`LoginRequestValidator` в `IdentityValidators.cs`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityValidators.cs).
 4. Use case: [`IdentityApplicationService.LoginAsync`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityApplicationService.cs).
-5. Domain state і value objects: [`User.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/User.cs), [`ValueObjects.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/ValueObjects.cs), [`RefreshToken.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs).
+5. Domain state і value objects: [`User.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/User.cs), [`ValueObjects.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/ValueObjects.cs), [`RefreshSession.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshSession.cs), [`RefreshToken.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs).
 6. Contracts: [`Abstractions.cs`](../../src/Services/Identity/AiControlCenter.Identity.Application/Abstractions.cs).
 7. Repository та Unit of Work implementations: [`IdentityRepositories.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs).
 8. Password, refresh і JWT implementations: [`PasswordHasherAdapter.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/PasswordHasherAdapter.cs), [`RefreshTokenGenerator.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RefreshTokenGenerator.cs), [`RsaAccessTokenIssuer.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RsaAccessTokenIssuer.cs).
@@ -489,8 +498,8 @@ ROLLBACK, а стан не змінюється. `User.Version`, замапле�
 4. Angular refresh orchestration: [`auth.service.ts`](../../frontend/ai-control-center-angular/src/app/core/auth/auth.service.ts), [`auth.store.ts`](../../frontend/ai-control-center-angular/src/app/core/auth/auth.store.ts), [`auth.interceptor.ts`](../../frontend/ai-control-center-angular/src/app/core/auth/auth.interceptor.ts).
 5. Use case: [`IdentityApplicationService.RefreshSessionAsync`](../../src/Services/Identity/AiControlCenter.Identity.Application/IdentityApplicationService.cs).
 6. Hashing: [`RefreshTokenGenerator.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RefreshTokenGenerator.cs).
-7. Rotation rules: [`RefreshToken.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs).
-8. `SELECT ... FOR UPDATE`, family revoke і transaction: [`IdentityRepositories.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs).
+7. Session/revocation та rotation rules: [`RefreshSession.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshSession.cs), [`RefreshToken.cs`](../../src/Services/Identity/AiControlCenter.Identity.Domain/RefreshToken.cs).
+8. Stable-session `SELECT ... FOR UPDATE`, revoke і transaction: [`IdentityRepositories.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityRepositories.cs).
 9. PostgreSQL mapping та indexes: [`IdentityEntityConfigurations.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Persistence/IdentityEntityConfigurations.cs).
 10. Новий access token: [`RsaAccessTokenIssuer.cs`](../../src/Services/Identity/AiControlCenter.Identity.Infrastructure/Security/RsaAccessTokenIssuer.cs).
 11. HTTP error mapping: [`IdentityExceptionHandler.cs`](../../src/Services/Identity/AiControlCenter.Identity.Api/IdentityExceptionHandler.cs).

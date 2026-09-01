@@ -71,4 +71,49 @@ describe('authInterceptor', () => {
     expect(request.request.headers.has('Authorization')).toBe(false);
     request.flush({});
   });
+
+  it.each([
+    '//attacker.example/path',
+    'javascript:alert(1)',
+    'data:text/plain,token',
+    'http://[::1',
+    'http://attacker.example/path',
+  ])('never sends the platform token to unsafe URL %s', (url) => {
+    client.get(url).subscribe();
+    const request = http.expectOne(url);
+    expect(request.request.headers.has('Authorization')).toBe(false);
+    request.flush({});
+  });
+
+  it('fails closed without globalThis.location', () => {
+    const originalLocation = globalThis.location;
+    vi.stubGlobal('location', undefined);
+    try {
+      client.get('/api/protected').subscribe();
+      const request = http.expectOne('/api/protected');
+      expect(request.request.headers.has('Authorization')).toBe(false);
+      request.flush({});
+    } finally {
+      vi.stubGlobal('location', originalLocation);
+    }
+  });
+
+  it.each([
+    '/api/resource',
+    'api/resource',
+    `${globalThis.location.origin}/api/resource`,
+  ])('sends the platform token to same-origin URL %s', (url) => {
+    client.get(url).subscribe();
+    const request = http.expectOne(url);
+    expect(request.request.headers.get('Authorization')).toBe('Bearer old-token');
+    request.flush({});
+  });
+
+  it('does not add Bearer to an absolute same-origin public auth URL', () => {
+    const url = `${globalThis.location.origin}/api/identity/v1/auth/refresh`;
+    client.post(url, {}).subscribe();
+    const request = http.expectOne(url);
+    expect(request.request.headers.has('Authorization')).toBe(false);
+    request.flush({});
+  });
 });

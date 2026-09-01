@@ -54,3 +54,12 @@ public sealed record AuthSessionResult(
     DateTimeOffset RefreshTokenExpiresAt);
 
 public sealed record GeneratedRefreshToken(string RawToken, RefreshTokenHash Hash);
+
+public sealed record ClientSessionMetadata(string? IpAddress, string? UserAgent)
+{
+    public static ClientSessionMetadata Empty { get; } = new(null, null);
+}
+
+public sealed record FailedLoginState(int AccessFailedCount, DateTimeOffset? LockoutEnd);
+
+public sealed record LockedRefreshSession(RefreshSession Session, RefreshToken Token);

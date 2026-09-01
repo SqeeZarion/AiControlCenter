@@ -36,6 +36,12 @@ flowchart LR
 
 Gateway надає `/hubs/system` із технічним методом `Ping`. Hub потребує валідного access token і `PasswordChanged`. Angular передає token через `accessTokenFactory`; SignalR використовує `access_token` query parameter для WebSocket, який Security приймає лише на цьому Hub path.
 
+`SystemHub` розміщений безпосередньо в процесі Gateway: Nginx проксіює `/hubs/system`
+до Gateway, а Gateway завершує SignalR/WebSocket-з'єднання сам. Цей шлях не проходить
+через YARP і не має downstream service. Тому інтеграційна перевірка через справжній
+Kestrel/WebSocket transport доводить роботу Gateway hub, JWT extraction та policy,
+але не перевіряє YARP forwarding.
+
 ## Correlation ID
 
 `CorrelationIdMiddleware` приймає trimmed `X-Correlation-ID` довжиною до 128 символів без control characters. Інакше використовується ASP.NET Core `TraceIdentifier`. Обране значення записується у response header, `HttpContext.TraceIdentifier` та logging scope як `CorrelationId`.

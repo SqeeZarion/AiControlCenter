@@ -59,7 +59,7 @@ services:
       - "5080:8080"
     healthcheck:
       <<: *http-healthcheck
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/live"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
     networks:
       aicontrolcenter:
         ipv4_address: 172.31.0.20
@@ -114,7 +114,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__IdentityDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD};Search Path=identity"
       Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
-      JwtIssuer__PrivateKeyPath: /run/aicontrolcenter-keys/identity-private.pem
+      JwtSigning__PrivateKeyPath: /run/aicontrolcenter-keys/identity-private.pem
       DataProtection__KeysPath: /var/lib/aicontrolcenter/data-protection
       IdentityBootstrap__Email: ${IDENTITY_BOOTSTRAP_EMAIL:-}
       IdentityBootstrap__TemporaryPassword: ${IDENTITY_BOOTSTRAP_TEMPORARY_PASSWORD:-}

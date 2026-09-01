@@ -5,7 +5,7 @@ namespace AiControlCenter.Identity.Application;
 public sealed class IdentityApplicationService(
     IUserRepository users,
     IRoleRepository roles,
-    IRefreshTokenRepository refreshTokens,
+    IRefreshSessionRepository refreshSessions,
     IIdentityUnitOfWork unitOfWork,
     IPasswordHasher passwordHasher,
     IAccessTokenIssuer accessTokenIssuer,
@@ -14,38 +14,62 @@ public sealed class IdentityApplicationService(
 {
     private const int MaximumLoginAttempts = 5;
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan RefreshFamilyLifetime = TimeSpan.FromDays(30);
+    private static readonly TimeSpan RefreshSessionLifetime = TimeSpan.FromDays(30);
 
-    public async Task<AuthSessionResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
+    public Task<AuthSessionResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken) =>
+        LoginAsync(request, ClientSessionMetadata.Empty, cancellationToken);
+
+    public async Task<AuthSessionResult> LoginAsync(
+        LoginRequest request,
+        ClientSessionMetadata metadata,
+        CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var user = await users.GetByEmailAsync(Email.Create(request.Email), cancellationToken);
-        if (user is null)
+        var candidate = await users.GetByEmailForAuthenticationAsync(Email.Create(request.Email), cancellationToken);
+        if (candidate is null)
         {
             passwordHasher.VerifyUnknown(request.Password);
             throw new IdentityAuthenticationException();
         }
 
-        if (!user.CanLogin(now))
+        if (!candidate.CanLogin(now))
         {
             throw new IdentityAuthenticationException();
         }
 
-        var verification = passwordHasher.Verify(user.PasswordHash, request.Password);
+        var verification = passwordHasher.Verify(candidate.PasswordHash, request.Password);
         if (verification == PasswordVerificationResult.Failed)
         {
-            user.RecordFailedLogin(now, MaximumLoginAttempts, LockoutDuration);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            _ = await users.RecordFailedLoginAsync(
+                candidate.Id,
+                now,
+                MaximumLoginAttempts,
+                LockoutDuration,
+                cancellationToken);
             throw new IdentityAuthenticationException();
         }
 
-        if (verification == PasswordVerificationResult.SuccessRehashNeeded)
-        {
-            user.ChangePassword(passwordHasher.Hash(request.Password), user.MustChangePassword, now);
-        }
+        var rehashedPassword = verification == PasswordVerificationResult.SuccessRehashNeeded
+            ? passwordHasher.Hash(request.Password)
+            : null;
 
-        user.RecordSuccessfulLogin(now);
-        return await CreateSessionAsync(user, RefreshTokenFamilyId.New(), now, cancellationToken);
+        return await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
+        {
+            var current = await users.GetByIdForUpdateAsync(candidate.Id, transactionCancellationToken);
+            if (current is null || !current.CanLogin(now)
+                || !string.Equals(current.PasswordHash, candidate.PasswordHash, StringComparison.Ordinal))
+            {
+                throw new IdentityAuthenticationException();
+            }
+
+            if (rehashedPassword is not null)
+            {
+                current.ChangePassword(rehashedPassword, current.MustChangePassword, now);
+            }
+
+            current.RecordSuccessfulLogin(now);
+            return await CreateSessionAsync(current, metadata, now, transactionCancellationToken);
+        }, cancellationToken);
     }
 
     public async Task<AuthSessionResult> RefreshSessionAsync(
@@ -57,55 +81,54 @@ public sealed class IdentityApplicationService(
             throw new IdentityAuthenticationException();
         }
 
-        var outcome = await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
+        var session = await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
         {
             var now = timeProvider.GetUtcNow();
-            var hash = refreshTokenGenerator.Hash(rawRefreshToken);
-            var current = await refreshTokens.GetByHashForUpdateAsync(hash, transactionCancellationToken);
-            if (current is null)
+            var locked = await refreshSessions.GetByTokenHashForUpdateAsync(
+                refreshTokenGenerator.Hash(rawRefreshToken),
+                transactionCancellationToken);
+            if (locked is null)
             {
-                return RefreshOutcome.Invalid;
+                return null;
             }
 
-            if (current.ReplacedByTokenId is not null)
+            var currentSession = locked.Session;
+            var currentToken = locked.Token;
+            if (currentToken.UsedAt is not null || currentToken.ReplacedByTokenId is not null)
             {
-                await refreshTokens.RevokeFamilyAsync(
-                    current.FamilyId,
-                    now,
-                    "Refresh token reuse detected",
-                    transactionCancellationToken);
+                currentSession.Revoke(now, "Refresh token reuse detected");
                 await unitOfWork.SaveChangesAsync(transactionCancellationToken);
-                return RefreshOutcome.ReuseDetected;
+                return null;
             }
 
-            if (!current.IsActive(now) || !current.User.CanLogin(now))
+            if (!currentSession.IsActive(now)
+                || !currentToken.IsCurrent(now)
+                || !currentSession.User.CanLogin(now))
             {
-                await refreshTokens.RevokeFamilyAsync(
-                    current.FamilyId,
-                    now,
-                    "Session is no longer valid",
-                    transactionCancellationToken);
+                currentSession.Revoke(now, "Session is no longer valid");
                 await unitOfWork.SaveChangesAsync(transactionCancellationToken);
-                return RefreshOutcome.Invalid;
+                return null;
             }
 
             var generated = refreshTokenGenerator.Generate();
             var replacement = RefreshToken.Create(
-                current.UserId,
+                currentSession.Id,
                 generated.Hash,
-                current.FamilyId,
                 now,
-                current.ExpiresAt);
-            current.RotateTo(replacement, now);
-            refreshTokens.Add(replacement);
+                currentSession.ExpiresAt);
+            currentToken.RotateTo(replacement, now);
+            currentSession.RecordUse(now);
+            refreshSessions.Add(replacement);
             await unitOfWork.SaveChangesAsync(transactionCancellationToken);
 
-            return new RefreshOutcome(
-                BuildSession(current.User, generated.RawToken, replacement.ExpiresAt, now),
-                false);
+            return BuildSession(
+                currentSession.User,
+                generated.RawToken,
+                currentSession.ExpiresAt,
+                now);
         }, cancellationToken);
 
-        return outcome.Session ?? throw new IdentityAuthenticationException();
+        return session ?? throw new IdentityAuthenticationException();
     }
 
     public async Task LogoutCurrentSessionAsync(string? rawRefreshToken, CancellationToken cancellationToken)
@@ -117,24 +140,21 @@ public sealed class IdentityApplicationService(
 
         await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
         {
-            var token = await refreshTokens.GetByHashForUpdateAsync(
+            var locked = await refreshSessions.GetByTokenHashForUpdateAsync(
                 refreshTokenGenerator.Hash(rawRefreshToken),
                 transactionCancellationToken);
-            token?.Revoke(timeProvider.GetUtcNow(), "User logout");
+            locked?.Session.Revoke(timeProvider.GetUtcNow(), "User logout");
             await unitOfWork.SaveChangesAsync(transactionCancellationToken);
             return true;
         }, cancellationToken);
     }
 
-    public async Task LogoutAllSessionsAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        await refreshTokens.RevokeAllAsync(
+    public Task LogoutAllSessionsAsync(Guid userId, CancellationToken cancellationToken) =>
+        refreshSessions.RevokeAllAsync(
             userId,
             timeProvider.GetUtcNow(),
             "User logout from all sessions",
             cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-    }
 
     public async Task<CurrentUserDto> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -147,16 +167,29 @@ public sealed class IdentityApplicationService(
         ChangePasswordRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await GetRequiredUserAsync(userId, cancellationToken);
-        if (passwordHasher.Verify(user.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed)
+        var candidate = await users.GetByIdForAuthenticationAsync(userId, cancellationToken)
+            ?? throw new IdentityNotFoundException("User");
+        if (passwordHasher.Verify(candidate.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed)
         {
             throw new IdentityAuthenticationException();
         }
 
-        var now = timeProvider.GetUtcNow();
-        user.ChangePassword(passwordHasher.Hash(request.NewPassword), false, now);
-        await refreshTokens.RevokeAllAsync(user.Id, now, "Password changed", cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var newPasswordHash = passwordHasher.Hash(request.NewPassword);
+        await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
+        {
+            var user = await users.GetByIdForUpdateAsync(userId, transactionCancellationToken)
+                ?? throw new IdentityNotFoundException("User");
+            if (!string.Equals(user.PasswordHash, candidate.PasswordHash, StringComparison.Ordinal))
+            {
+                throw new IdentityAuthenticationException();
+            }
+
+            var now = timeProvider.GetUtcNow();
+            user.ChangePassword(newPasswordHash, false, now);
+            await refreshSessions.RevokeAllAsync(user.Id, now, "Password changed", transactionCancellationToken);
+            await unitOfWork.SaveChangesAsync(transactionCancellationToken);
+            return true;
+        }, cancellationToken);
     }
 
     public async Task<UserDetailsDto> CreateUserAsync(
@@ -206,7 +239,7 @@ public sealed class IdentityApplicationService(
         unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
         {
             await roles.AcquireAdminMutationLockAsync(transactionCancellationToken);
-            var user = await GetRequiredUserAsync(userId, transactionCancellationToken);
+            var user = await GetRequiredUserForUpdateAsync(userId, transactionCancellationToken);
             if (user.Status == UserStatus.Active && user.HasRole(Role.AdminId)
                 && await users.CountActiveAdminsAsync(transactionCancellationToken) <= 1)
             {
@@ -215,7 +248,7 @@ public sealed class IdentityApplicationService(
 
             var now = timeProvider.GetUtcNow();
             user.Block(now);
-            await refreshTokens.RevokeAllAsync(user.Id, now, "User blocked", transactionCancellationToken);
+            await refreshSessions.RevokeAllAsync(user.Id, now, "User blocked", transactionCancellationToken);
             await unitOfWork.SaveChangesAsync(transactionCancellationToken);
             return ToDetails(user);
         }, cancellationToken);
@@ -227,7 +260,7 @@ public sealed class IdentityApplicationService(
         unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
         {
             await roles.AcquireAdminMutationLockAsync(transactionCancellationToken);
-            var user = await GetRequiredUserAsync(userId, transactionCancellationToken);
+            var user = await GetRequiredUserForUpdateAsync(userId, transactionCancellationToken);
             var assignedRoles = await ResolveRolesAsync(request.Roles, transactionCancellationToken);
             var removesAdmin = user.HasRole(Role.AdminId) && assignedRoles.All(role => role.Id != Role.AdminId);
             if (user.Status == UserStatus.Active && removesAdmin
@@ -238,7 +271,7 @@ public sealed class IdentityApplicationService(
 
             var now = timeProvider.GetUtcNow();
             user.ReplaceRoles(assignedRoles, now);
-            await refreshTokens.RevokeAllAsync(user.Id, now, "Roles changed", transactionCancellationToken);
+            await refreshSessions.RevokeAllAsync(user.Id, now, "Roles changed", transactionCancellationToken);
             await unitOfWork.SaveChangesAsync(transactionCancellationToken);
             return ToDetails(user);
         }, cancellationToken);
@@ -248,22 +281,26 @@ public sealed class IdentityApplicationService(
         ResetUserPasswordRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await GetRequiredUserAsync(userId, cancellationToken);
-        var now = timeProvider.GetUtcNow();
-        user.ChangePassword(passwordHasher.Hash(request.TemporaryPassword), true, now);
-        await refreshTokens.RevokeAllAsync(user.Id, now, "Password reset by Admin", cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var newPasswordHash = passwordHasher.Hash(request.TemporaryPassword);
+        await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
+        {
+            var user = await GetRequiredUserForUpdateAsync(userId, transactionCancellationToken);
+            var now = timeProvider.GetUtcNow();
+            user.ChangePassword(newPasswordHash, true, now);
+            await refreshSessions.RevokeAllAsync(user.Id, now, "Password reset by Admin", transactionCancellationToken);
+            await unitOfWork.SaveChangesAsync(transactionCancellationToken);
+            return true;
+        }, cancellationToken);
     }
 
     public async Task RevokeUserSessionsAsync(Guid userId, CancellationToken cancellationToken)
     {
         _ = await GetRequiredUserAsync(userId, cancellationToken);
-        await refreshTokens.RevokeAllAsync(
+        await refreshSessions.RevokeAllAsync(
             userId,
             timeProvider.GetUtcNow(),
             "Sessions revoked by Admin",
             cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<RoleDto>> ListRolesAsync(CancellationToken cancellationToken) =>
@@ -290,7 +327,6 @@ public sealed class IdentityApplicationService(
             var user = await users.GetByEmailAsync(email, transactionCancellationToken);
             if (user is null)
             {
-                //створюється користувач
                 user = User.Create(
                     email,
                     DisplayName.Create(displayName),
@@ -306,20 +342,22 @@ public sealed class IdentityApplicationService(
             }
 
             user.ReplaceRoles([adminRole], now);
-            await refreshTokens.RevokeAllAsync(user.Id, now, "Admin bootstrap", transactionCancellationToken);
+            await refreshSessions.RevokeAllAsync(user.Id, now, "Admin bootstrap", transactionCancellationToken);
             await unitOfWork.SaveChangesAsync(transactionCancellationToken);
             return true;
         }, cancellationToken);
 
     private async Task<AuthSessionResult> CreateSessionAsync(
         User user,
-        RefreshTokenFamilyId familyId,
+        ClientSessionMetadata metadata,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var generated = refreshTokenGenerator.Generate();
-        var expiresAt = now.Add(RefreshFamilyLifetime);
-        refreshTokens.Add(RefreshToken.Create(user.Id, generated.Hash, familyId, now, expiresAt));
+        var expiresAt = now.Add(RefreshSessionLifetime);
+        var session = RefreshSession.Create(user.Id, now, expiresAt, metadata.IpAddress, metadata.UserAgent);
+        refreshSessions.Add(session);
+        refreshSessions.Add(RefreshToken.Create(session.Id, generated.Hash, now, expiresAt));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return BuildSession(user, generated.RawToken, expiresAt, now);
     }
@@ -340,6 +378,10 @@ public sealed class IdentityApplicationService(
 
     private async Task<User> GetRequiredUserAsync(Guid userId, CancellationToken cancellationToken) =>
         await users.GetByIdAsync(userId, cancellationToken)
+        ?? throw new IdentityNotFoundException("User");
+
+    private async Task<User> GetRequiredUserForUpdateAsync(Guid userId, CancellationToken cancellationToken) =>
+        await users.GetByIdForUpdateAsync(userId, cancellationToken)
         ?? throw new IdentityNotFoundException("User");
 
     private async Task<IReadOnlyCollection<Role>> ResolveRolesAsync(
@@ -375,11 +417,4 @@ public sealed class IdentityApplicationService(
 
     private static string[] GetRoleNames(User user) =>
         user.UserRoles.Select(userRole => userRole.Role.Name.Value).Order().ToArray();
-
-    private sealed record RefreshOutcome(AuthSessionResult? Session, bool Reused)
-    {
-        public static RefreshOutcome Invalid { get; } = new(null, false);
-
-        public static RefreshOutcome ReuseDetected { get; } = new(null, true);
-    }
 }

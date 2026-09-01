@@ -22,7 +22,7 @@ sequenceDiagram
 - `/api/control-plane/**`, `/api/orchestrator/**`, `/api/integrations/**` — потребують `PasswordChanged`.
 - `/api/gateway/service-info` і `/service-info` — технічна інформація; anonymous лише в Development.
 - `/hubs/system` — `SystemHub.Ping`, authenticated і `PasswordChanged`, з закриттям підключення після завершення token.
-- `ForwardBearerTokenTransformProvider` зберігає Bearer header під час YARP forwarding.
+- YARP передає вхідний `Authorization` header стандартною поведінкою; окремого transform provider для Bearer token немає.
 
 Gateway не містить use cases сервісів і посилається лише на `Contracts`, `Grpc.Contracts`, `Observability`, `Security`.
 

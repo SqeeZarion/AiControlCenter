@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Globalization;
 using AiControlCenter.Identity.Application;
 using AiControlCenter.Identity.Domain;
@@ -10,25 +9,26 @@ using Microsoft.IdentityModel.Tokens;
 namespace AiControlCenter.Identity.Infrastructure.Security;
 
 //Створює короткочасний JWT access token і підписує його RSA-ключем
-internal sealed class RsaAccessTokenIssuer : IAccessTokenIssuer, IDisposable
+internal sealed class RsaAccessTokenIssuer : IAccessTokenIssuer
 {
     private readonly JwtIssuerOptions options;
-    private readonly RSA rsa;
     private readonly SigningCredentials signingCredentials;
     private readonly JsonWebTokenHandler tokenHandler = new() { SetDefaultTimesOnTokenCreation = false };
 
-    public RsaAccessTokenIssuer(IOptions<JwtIssuerOptions> options)
+    public RsaAccessTokenIssuer(
+        IOptions<JwtIssuerOptions> options,
+        IdentityRsaKeySnapshot keySnapshot)
     {
         this.options = options.Value;
-        Validate(this.options);
         //Створюється об’єкт для роботи з RSA.
-        rsa = RSA.Create();
         //Завантаження private key
-        rsa.ImportFromPem(File.ReadAllText(this.options.PrivateKeyPath));
         //Налаштування підпису
-        signingCredentials = new SigningCredentials(
-            new RsaSecurityKey(rsa) { KeyId = this.options.KeyId },
-            SecurityAlgorithms.RsaSha256);
+        var securityKey = new RsaSecurityKey(keySnapshot.PrivateKey)
+        {
+            KeyId = this.options.KeyId,
+            CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false },
+        };
+        signingCredentials = new SigningCredentials(securityKey, this.options.Algorithm);
     }
 
     //Метод створює access token для конкретного користувача.
@@ -70,26 +70,4 @@ internal sealed class RsaAccessTokenIssuer : IAccessTokenIssuer, IDisposable
         return new AccessTokenResult(tokenHandler.CreateToken(descriptor), expiresAt);
     }
 
-    public void Dispose() => rsa.Dispose();
-
-    private static void Validate(JwtIssuerOptions options)
-    {
-        if (options.AccessTokenMinutes is < 1 or > 10)
-        {
-            throw new InvalidOperationException("JWT access token lifetime must be between 1 and 10 minutes.");
-        }
-
-        if (string.IsNullOrWhiteSpace(options.Issuer)
-            || string.IsNullOrWhiteSpace(options.Audience)
-            || string.IsNullOrWhiteSpace(options.KeyId)
-            || string.IsNullOrWhiteSpace(options.PrivateKeyPath))
-        {
-            throw new InvalidOperationException("JWT issuer configuration is incomplete.");
-        }
-
-        if (!File.Exists(options.PrivateKeyPath))
-        {
-            throw new FileNotFoundException("The JWT private key file was not found.", options.PrivateKeyPath);
-        }
-    }
 }

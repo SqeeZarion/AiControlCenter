@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AiControlCenter.Security;
@@ -15,15 +16,41 @@ public static class PlatformSecurityExtensions
     //Метод реєструє повну JWT authentication для поточного сервісу.
     public static IServiceCollection AddPlatformAuthentication(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration) =>
+        AddPlatformAuthenticationCore(services, configuration, preloadedPublicKey: null);
+
+    public static IServiceCollection AddPlatformAuthentication(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        RSA preloadedPublicKey) =>
+        AddPlatformAuthenticationCore(services, configuration, preloadedPublicKey);
+
+    private static IServiceCollection AddPlatformAuthenticationCore(
+        IServiceCollection services,
+        IConfiguration configuration,
+        RSA? preloadedPublicKey)
     {
         //Якщо секції немає, програма відразу не запуститься. Це fail-fast: краще одразу побачити неправильний конфіг, ніж запустити API без нормальної перевірки токенів.
         var settings = configuration.GetSection(PlatformAuthenticationOptions.SectionName)
             .Get<PlatformAuthenticationOptions>()
             ?? throw new InvalidOperationException("Authentication configuration is required.");
 
-        //Цей метод перевіряє конфігурацію під час запуску сервісу.
-        Validate(settings);
+        var validator = preloadedPublicKey is null
+            ? new PlatformAuthenticationOptionsValidator()
+            : new PlatformAuthenticationOptionsValidator(preloadedPublicKey);
+        var validation = validator.Validate(Options.DefaultName, settings);
+        if (validation.Failed)
+        {
+            throw new OptionsValidationException(
+                Options.DefaultName,
+                typeof(PlatformAuthenticationOptions),
+                validation.Failures);
+        }
+
+        services.AddSingleton<IValidateOptions<PlatformAuthenticationOptions>>(validator);
+        services.AddOptions<PlatformAuthenticationOptions>()
+            .Bind(configuration.GetSection(PlatformAuthenticationOptions.SectionName))
+            .ValidateOnStart();
 
         // Процес:
         //
@@ -33,9 +60,28 @@ public static class PlatformSecurityExtensions
         //     Йому встановлюється KeyId.
         //
         //     Цей ключ потім використовується для перевірки цифрового підпису JWT.
-        var rsa = RSA.Create();
-        rsa.ImportFromPem(File.ReadAllText(settings.PublicKeyPath));
-        var signingKey = new RsaSecurityKey(rsa) { KeyId = settings.KeyId };
+        RSA loadedRsa;
+        if (preloadedPublicKey is not null)
+        {
+            loadedRsa = preloadedPublicKey;
+        }
+        else if (!RsaPublicKeyLoader.TryLoad(settings.PublicKeyPath, out var rsa, out var keyFailure))
+        {
+            throw new OptionsValidationException(
+                Options.DefaultName,
+                typeof(PlatformAuthenticationOptions),
+                [keyFailure]);
+        }
+        else
+        {
+            loadedRsa = rsa!;
+            services.AddSingleton(loadedRsa);
+        }
+        var signingKey = new RsaSecurityKey(loadedRsa)
+        {
+            KeyId = settings.KeyId,
+            CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false },
+        };
 
         //Bearer означає: хто володіє токеном, той може його використати, тому токен не можна записувати в логи або передавати стороннім особам.
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -44,9 +90,14 @@ public static class PlatformSecurityExtensions
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    //Сервіс перевіряє, чи JWT підписаний приватним ключем Identity. (тобто  якщо змінити роль, токен перестає працювати)
+                    //Сервіс перевіряє, чи JWT підписаний приватним ключем Identity.
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = signingKey,
+                    TryAllIssuerSigningKeys = false,
+                    IssuerSigningKeyResolver = (_, _, keyId, _) =>
+                        string.Equals(keyId, settings.KeyId, StringComparison.Ordinal)
+                            ? [signingKey]
+                            : [],
                     ValidateIssuer = true,
                     ValidIssuer = settings.Issuer,
                     ValidateAudience = true,
@@ -58,7 +109,7 @@ public static class PlatformSecurityExtensions
                     ClockSkew = TimeSpan.FromSeconds(settings.ClockSkewSeconds),
                     NameClaimType = JwtRegisteredClaimNames.Sub,
                     RoleClaimType = SecurityClaimNames.Role,
-                    ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+                    ValidAlgorithms = [settings.Algorithm],
                 };
                 options.Events = new JwtBearerEvents
                 {
@@ -113,7 +164,11 @@ public static class PlatformSecurityExtensions
             options.AddPolicy(SecurityPolicyNames.PasswordChanged, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireAssertion(context =>
-                    !context.User.HasClaim(SecurityClaimNames.PasswordChangeRequired, "true")));
+                {
+                    var claims = context.User.FindAll(SecurityClaimNames.PasswordChangeRequired).ToArray();
+                    return claims.Length == 1
+                        && string.Equals(claims[0].Value, "false", StringComparison.Ordinal);
+                }));
         });
 
         return services;
@@ -128,26 +183,4 @@ public static class PlatformSecurityExtensions
         return builder;
     }
 
-    //Цей метод перевіряє конфігурацію під час запуску сервісу.
-    private static void Validate(PlatformAuthenticationOptions settings)
-    {
-        if (string.IsNullOrWhiteSpace(settings.Issuer)
-            || string.IsNullOrWhiteSpace(settings.Audience)
-            || string.IsNullOrWhiteSpace(settings.KeyId)
-            || string.IsNullOrWhiteSpace(settings.PublicKeyPath))
-        {
-            throw new InvalidOperationException(
-                "Authentication issuer, audience, key id and public key path are required.");
-        }
-
-        if (settings.ClockSkewSeconds is < 0 or > 30)
-        {
-            throw new InvalidOperationException("Authentication clock skew must be between 0 and 30 seconds.");
-        }
-
-        if (!File.Exists(settings.PublicKeyPath))
-        {
-            throw new FileNotFoundException("The JWT public key file was not found.", settings.PublicKeyPath);
-        }
-    }
 }

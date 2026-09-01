@@ -13,7 +13,8 @@ const publicAuthPaths = [
 ];
 
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
-  if (!isSameOrigin(request.url) || publicAuthPaths.some((path) => request.url.startsWith(path))) {
+  const normalizedUrl = normalizeSameOrigin(request.url);
+  if (!normalizedUrl || publicAuthPaths.some((path) => normalizedUrl.pathname.startsWith(path))) {
     return next(request);
   }
 
@@ -47,14 +48,11 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   );
 };
 
-function isSameOrigin(url: string): boolean {
-  if (url.startsWith('/')) {
-    return true;
-  }
-
+function normalizeSameOrigin(url: string): URL | null {
   try {
-    return new URL(url, globalThis.location.origin).origin === globalThis.location.origin;
+    const normalized = new URL(url, globalThis.location.origin);
+    return normalized.origin === globalThis.location.origin ? normalized : null;
   } catch {
-    return false;
+    return null;
   }
 }

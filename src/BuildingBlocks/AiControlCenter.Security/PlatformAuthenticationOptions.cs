@@ -12,6 +12,7 @@ public sealed class PlatformAuthenticationOptions
     public string PublicKeyPath { get; init; } = string.Empty;
 
     public string KeyId { get; init; } = string.Empty;
+    public string Algorithm { get; init; } = "RS256";
     //Допустима різниця часу між серверами. (При ClockSkewSeconds = 30 токен ще може пройти перевірку. У коді дозволено максимум 30 секунд, щоб не продовжувати життя токена надто сильно.)
     public int ClockSkewSeconds { get; init; } = 30;
 }

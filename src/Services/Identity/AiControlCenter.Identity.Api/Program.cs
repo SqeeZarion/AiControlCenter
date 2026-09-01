@@ -20,11 +20,11 @@ builder.Services.AddExceptionHandler<IdentityExceptionHandler>();
 builder.Services.AddApiFoundation();
 //Цей extension method реєструє Application-компоненти в DI-контейнері. Валідатори
 builder.Services.AddIdentityApplication();
-builder.Services.AddIdentityInfrastructure(builder.Configuration);
+using var identityRsaKeySnapshot = builder.Services.AddIdentityInfrastructure(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 //Метод реєструє повну JWT authentication для поточного сервісу.
-builder.Services.AddPlatformAuthentication(builder.Configuration);
+builder.Services.AddPlatformAuthentication(builder.Configuration, identityRsaKeySnapshot.PublicKey);
 //перевіряє користувача
 builder.Services.AddPlatformAuthorization();
 builder.Services.AddAntiforgery(options =>

@@ -38,7 +38,12 @@ public sealed class LastAdminTests
     private sealed class UserRepositoryStub(User user, int adminCount) : IUserRepository
     {
         public Task<User?> GetByEmailAsync(Email email, CancellationToken cancellationToken) => Task.FromResult<User?>(user);
+        public Task<User?> GetByEmailForAuthenticationAsync(Email email, CancellationToken cancellationToken) => Task.FromResult<User?>(user);
         public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<User?>(user);
+        public Task<User?> GetByIdForAuthenticationAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<User?>(user);
+        public Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<User?>(user);
+        public Task<FailedLoginState?> RecordFailedLoginAsync(Guid userId, DateTimeOffset current, int maximumAttempts, TimeSpan lockoutDuration, CancellationToken cancellationToken) =>
+            Task.FromResult<FailedLoginState?>(new FailedLoginState(1, null));
         public Task<(IReadOnlyCollection<User> Items, int TotalCount)> ListAsync(int page, int pageSize, CancellationToken cancellationToken) =>
             Task.FromResult(((IReadOnlyCollection<User>)[user], 1));
         public Task<int> CountActiveAdminsAsync(CancellationToken cancellationToken) => Task.FromResult(adminCount);
@@ -53,12 +58,12 @@ public sealed class LastAdminTests
         public Task AcquireAdminMutationLockAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class RefreshRepositoryStub : IRefreshTokenRepository
+    private sealed class RefreshRepositoryStub : IRefreshSessionRepository
     {
-        public Task<RefreshToken?> GetByHashForUpdateAsync(RefreshTokenHash hash, CancellationToken cancellationToken) => Task.FromResult<RefreshToken?>(null);
+        public Task<LockedRefreshSession?> GetByTokenHashForUpdateAsync(RefreshTokenHash hash, CancellationToken cancellationToken) => Task.FromResult<LockedRefreshSession?>(null);
+        public void Add(RefreshSession refreshSession) { }
         public void Add(RefreshToken refreshToken) { }
         public Task RevokeAllAsync(Guid userId, DateTimeOffset now, string reason, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task RevokeFamilyAsync(RefreshTokenFamilyId familyId, DateTimeOffset now, string reason, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class UnitOfWorkStub : IIdentityUnitOfWork

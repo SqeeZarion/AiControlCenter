@@ -58,7 +58,12 @@ public static class IdentityEndpointExtensions
             HttpContext context,
             CancellationToken cancellationToken) =>
         {
-            var session = await service.LoginAsync(request, cancellationToken);
+            var session = await service.LoginAsync(
+                request,
+                new ClientSessionMetadata(
+                    context.Connection.RemoteIpAddress?.ToString(),
+                    context.Request.Headers.UserAgent.ToString()),
+                cancellationToken);
             SetRefreshCookie(context, session, environment);
             return Results.Ok(ToResponse(session, timeProvider.GetUtcNow()));
         })
