@@ -16,7 +16,7 @@ Identity реалізує закритий first-party session protocol, а не
 - Identity повертає RSA-signed access JWT із lifetime не більше десяти хвилин.
 - Access token зберігається лише в Angular memory.
 - Identity передає rotating opaque refresh token у HttpOnly, SameSite=Strict cookie і зберігає лише його SHA-256 hash.
-- Refresh reuse відкликає всю token family.
+- Refresh reuse відкликає всю стабільну `RefreshSession`.
 - Gateway і кожен internal API перевіряють issuer, audience, RSA signature, algorithm, expiration і token-use claim.
 - Public registration не підтримується; users створюють лише Admins.
 

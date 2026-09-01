@@ -92,3 +92,7 @@ docker compose down
 - [Login, refresh і зберігання токенів](docs/identity/authentication-flow.md)
 - [AiControlCenter.Security](docs/security/security-overview.md)
 - [ADR: first-party session protocol](docs/architecture/adr/0001-first-party-session-protocol.md)
+- [ADR: RefreshSession aggregate](docs/architecture/adr/0002-refresh-session-aggregate.md)
+- [ADR: Identity concurrency rules](docs/architecture/adr/0003-identity-concurrency-rules.md)
+- [ADR: JWT configuration and revocation window](docs/architecture/adr/0004-jwt-configuration-and-revocation-window.md)
+- [ADR: health semantics](docs/architecture/adr/0005-health-semantics.md)

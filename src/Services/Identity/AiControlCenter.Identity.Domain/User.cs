@@ -51,7 +51,7 @@ public sealed class User
 
     public ICollection<UserRole> UserRoles { get; private set; } = [];
 
-    public ICollection<RefreshToken> RefreshTokens { get; private set; } = [];
+    public ICollection<RefreshSession> RefreshSessions { get; private set; } = [];
 
     public static User Create(
         Email email,

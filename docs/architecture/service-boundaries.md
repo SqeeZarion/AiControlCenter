@@ -20,7 +20,7 @@ flowchart TB
 
 ## Identity
 
-Володіє users, fixed system roles, password hashes, rotating refresh-token families та схемою `identity`. Це єдиний сервіс із private signing key. Public registration відсутня; users створює Admin.
+Володіє users, fixed system roles, password hashes, стабільними `RefreshSession`, історією rotating refresh tokens та схемою `identity`. Це єдиний сервіс із private signing key. Public registration відсутня; users створює Admin.
 
 ## ControlPlane
 

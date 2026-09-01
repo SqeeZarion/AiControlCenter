@@ -7,7 +7,20 @@ public interface IUserRepository
 {
     Task<User?> GetByEmailAsync(Email email, CancellationToken cancellationToken);
 
+    Task<User?> GetByEmailForAuthenticationAsync(Email email, CancellationToken cancellationToken);
+
     Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<User?> GetByIdForAuthenticationAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<FailedLoginState?> RecordFailedLoginAsync(
+        Guid userId,
+        DateTimeOffset now,
+        int maximumAttempts,
+        TimeSpan lockoutDuration,
+        CancellationToken cancellationToken);
 
     Task<(IReadOnlyCollection<User> Items, int TotalCount)> ListAsync(
         int page,
@@ -30,23 +43,17 @@ public interface IRoleRepository
     Task AcquireAdminMutationLockAsync(CancellationToken cancellationToken);
 }
 
-public interface IRefreshTokenRepository
+public interface IRefreshSessionRepository
 {
-    Task<RefreshToken?> GetByHashForUpdateAsync(
+    Task<LockedRefreshSession?> GetByTokenHashForUpdateAsync(
         RefreshTokenHash hash,
         CancellationToken cancellationToken);
 
+    void Add(RefreshSession refreshSession);
+
     void Add(RefreshToken refreshToken);
 
-    //Відкликає всі refresh-токени користувача.
     Task RevokeAllAsync(Guid userId, DateTimeOffset now, string reason, CancellationToken cancellationToken);
-
-    //Відкликає всі зв'язані токени, при спробі використати старого токена й просить користувача заново залогінитись
-    Task RevokeFamilyAsync(
-        RefreshTokenFamilyId familyId,
-        DateTimeOffset now,
-        string reason,
-        CancellationToken cancellationToken);
 }
 
 //керує збереженням змін та транзакціями.

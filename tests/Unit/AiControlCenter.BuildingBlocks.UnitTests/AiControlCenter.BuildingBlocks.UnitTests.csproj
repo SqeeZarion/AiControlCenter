@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Contracts\AiControlCenter.Contracts.csproj" />
     <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Grpc.Contracts\AiControlCenter.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Observability\AiControlCenter.Observability.csproj" />
+    <ProjectReference Include="..\..\..\src\BuildingBlocks\AiControlCenter.Security\AiControlCenter.Security.csproj" />
   </ItemGroup>
 
 </Project>

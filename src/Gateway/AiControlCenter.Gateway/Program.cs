@@ -28,6 +28,8 @@ builder.Services.AddValidatorsFromAssemblyContaining<GatewayMarker>();
 builder.Services.AddSignalR();
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+builder.Services.AddHealthChecks()
+    .AddCheck<YarpConfigurationHealthCheck>("yarp-configuration", tags: ["ready"]);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

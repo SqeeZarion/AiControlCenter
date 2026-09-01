@@ -15,13 +15,17 @@ internal static class TestJwtTokenFactory
         Directory.CreateDirectory(DirectoryPath);
         PublicKeyPath = Path.Combine(DirectoryPath, "public.pem");
         PrivateKeyPath = Path.Combine(DirectoryPath, "private.pem");
+        PrivatePkcs1KeyPath = Path.Combine(DirectoryPath, "private-pkcs1.pem");
         File.WriteAllText(PublicKeyPath, Rsa.ExportSubjectPublicKeyInfoPem());
         File.WriteAllText(PrivateKeyPath, Rsa.ExportPkcs8PrivateKeyPem());
+        File.WriteAllText(PrivatePkcs1KeyPath, Rsa.ExportRSAPrivateKeyPem());
     }
 
     public static string PublicKeyPath { get; }
 
     public static string PrivateKeyPath { get; }
+
+    public static string PrivatePkcs1KeyPath { get; }
 
     public static string Issue(Guid? userId = null, string role = "Admin", bool passwordChangeRequired = false)
     {
