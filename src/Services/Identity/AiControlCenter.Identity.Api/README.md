@@ -19,7 +19,7 @@ flowchart LR
 - Authenticated: `/v1/auth/logout-all`, `/v1/users/me`, `/v1/users/me/change-password`.
 - `AdminOnly` + `PasswordChanged`: users, status, roles, password reset і session revocation; `/v1/roles`.
 - `IdentityExceptionHandler` переводить application/domain помилки у Problem Details.
-- Startup перевіряє конфігурацію, застосовує migrations, seed системних ролей і bootstrap admin.
+- Звичайний API startup fail-fast перевіряє RSA/configuration, запускає seed системних ролей і bootstrap admin. Окремий `--migrate` path реєструє лише Identity persistence та застосовує EF migrations без RSA, Data Protection, HTTP endpoints чи runtime integrations.
 
 ## Залежності й конфігурація
 

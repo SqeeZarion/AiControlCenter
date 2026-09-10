@@ -4,6 +4,10 @@
     <ProjectReference Include="..\AiControlCenter.ControlPlane.Domain\AiControlCenter.ControlPlane.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

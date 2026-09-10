@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using AiControlCenter.Identity.Application;
 using AiControlCenter.Identity.Api;
+using AiControlCenter.Identity.Application;
 using AiControlCenter.Identity.Infrastructure;
 using AiControlCenter.Identity.Infrastructure.Persistence;
 using AiControlCenter.Observability;
@@ -14,6 +14,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (args.Contains("--migrate", StringComparer.Ordinal))
+{
+    builder.Services.AddIdentityPersistence(builder.Configuration);
+    await using var migrationApp = builder.Build();
+    await using var scope = migrationApp.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<IdentityDbContext>().Database.MigrateAsync();
+    return;
+}
 
 builder.AddServiceDefaults();
 builder.Services.AddExceptionHandler<IdentityExceptionHandler>();
@@ -75,13 +84,6 @@ builder.Services.AddSwaggerGen(options => options.AddSecurityDefinition("Bearer"
 }));
 
 var app = builder.Build();
-
-if (args.Contains("--migrate", StringComparer.Ordinal))
-{
-    await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<IdentityDbContext>().Database.MigrateAsync();
-    return;
-}
 
 app.UseForwardedHeaders();
 app.UseApiFoundation();

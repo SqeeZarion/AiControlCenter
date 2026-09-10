@@ -13,6 +13,7 @@ flowchart LR
 - [Architecture tests](Architecture/AiControlCenter.ArchitectureTests/README.md)
 - [Building Blocks unit tests](Unit/AiControlCenter.BuildingBlocks.UnitTests/README.md)
 - [Identity unit tests](Unit/AiControlCenter.Identity.UnitTests/README.md)
+- [ControlPlane unit tests](Unit/AiControlCenter.ControlPlane.UnitTests/README.md)
 - [Gateway integration tests](Integration/AiControlCenter.Gateway.IntegrationTests/README.md)
 - [Services integration tests](Integration/AiControlCenter.Services.IntegrationTests/README.md)
 

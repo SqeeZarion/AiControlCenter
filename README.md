@@ -1,15 +1,16 @@
 # AiControlCenter
 
-AiControlCenter — платформа з вебінтерфейсом і набором ізольованих .NET-сервісів. Поточна реалізація надає захищений вхід, керування користувачами та сесіями, єдину точку входу через Gateway, технічні health/service-info перевірки, gRPC-зв’язок і SignalR Ping.
+AiControlCenter — платформа з вебінтерфейсом і набором ізольованих .NET-сервісів. Поточна реалізація надає захищений вхід, керування користувачами, сесіями й напрямками, єдину точку входу через Gateway, технічні health/service-info перевірки, gRPC-зв’язок і SignalR Ping.
 
 ## Що вже працює
 
 - Identity: login, refresh із ротацією, logout, зміна пароля, ролі та адміністративне керування користувачами.
 - Gateway: перевірка JWT, authorization policies, YARP-проксіювання та SignalR Hub.
-- ControlPlane, Orchestrator та Integrations: ізольовані API, health checks і власні PostgreSQL-схеми; бізнес-функції ще не додані.
+- ControlPlane: керування життєвим циклом напрямків, статус, порядок сортування, архівування/відновлення та власна PostgreSQL-схема; hard delete відсутній.
+- Orchestrator та Integrations: ізольовані API, health checks і власні PostgreSQL-схеми; бізнес-функції ще не додані.
 - Orchestrator → ControlPlane: захищений технічний gRPC-виклик.
 - Worker і RabbitMQ/MassTransit: підготовлений транспортний каркас без бізнес-повідомлень та consumers.
-- Angular: login, відновлення сесії, memory-only access token, guards, interceptor, зміна пароля та SignalR-статус.
+- Angular: login, відновлення сесії, memory-only access token, guards, interceptor, зміна пароля, SignalR-статус і панель керування напрямками.
 
 ## Архітектура
 
@@ -96,3 +97,5 @@ docker compose down
 - [ADR: Identity concurrency rules](docs/architecture/adr/0003-identity-concurrency-rules.md)
 - [ADR: JWT configuration and revocation window](docs/architecture/adr/0004-jwt-configuration-and-revocation-window.md)
 - [ADR: health semantics](docs/architecture/adr/0005-health-semantics.md)
+- [Directions: модель, API та доступ](docs/architecture/directions.md)
+- [ADR: життєвий цикл Direction](docs/architecture/adr/0006-direction-lifecycle-and-access.md)

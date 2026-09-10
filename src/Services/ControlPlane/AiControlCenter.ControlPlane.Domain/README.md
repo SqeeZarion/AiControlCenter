@@ -1,6 +1,6 @@
 # AiControlCenter.ControlPlane.Domain
 
-Чистий доменний шар ControlPlane. У поточному коді entities, value objects і business rules ще відсутні.
+Чистий доменний шар ControlPlane містить aggregate root `Direction` і його invariants без залежностей від Application, EF Core або ASP.NET Core.
 
 ```mermaid
 flowchart BT
@@ -8,8 +8,8 @@ flowchart BT
     Infrastructure["ControlPlane.Infrastructure"] --> Domain
 ```
 
-Коли модель з’явиться, цей проєкт володітиме лише доменними invariants і не залежатиме від Application, EF Core, ASP.NET Core, MassTransit або зовнішніх SDK.
+`Direction` нормалізує назву та унікальний code, перевіряє status і sort order, веде UTC timestamps та виконує явні операції `Archive`/`Restore`. Архівований запис не можна редагувати, активувати або пересортувати до відновлення. Повторна операція над уже досягнутим archive state не змінює сутність.
 
 `ProjectReference` і NuGet-залежності відсутні.
 
-[ControlPlane](../README.md) · [Application](../AiControlCenter.ControlPlane.Application/README.md) · [Правила залежностей](../../../../docs/architecture/dependency-rules.md)
+[ControlPlane](../README.md) · [Application](../AiControlCenter.ControlPlane.Application/README.md) · [Directions](../../../../docs/architecture/directions.md) · [Правила залежностей](../../../../docs/architecture/dependency-rules.md)

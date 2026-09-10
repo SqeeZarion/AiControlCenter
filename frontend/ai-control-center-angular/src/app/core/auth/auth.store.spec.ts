@@ -1,7 +1,7 @@
 import { provideHttpClient, withXsrfConfiguration } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AccessTokenStore } from './access-token.store';
 import { AuthSessionDto } from './auth.models';
@@ -28,7 +28,9 @@ describe('AuthStore', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' })),
+        provideHttpClient(
+          withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' }),
+        ),
         provideHttpClientTesting(),
         provideRouter([]),
         {
@@ -70,5 +72,25 @@ describe('AuthStore', () => {
 
     expect(await first).toBe(true);
     expect(await second).toBe(true);
+  });
+
+  it('clears the session and navigates once when a shared refresh fails', async () => {
+    accessTokens.set('expired-token');
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const first = store.refresh();
+    const second = store.refresh();
+    http.expectOne('/api/identity/v1/auth/refresh').flush(null, {
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+
+    expect(await first).toBe(false);
+    expect(await second).toBe(false);
+    expect(accessTokens.token()).toBeNull();
+    expect(store.state()).toBe('anonymous');
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(['/login'], expect.anything());
   });
 });

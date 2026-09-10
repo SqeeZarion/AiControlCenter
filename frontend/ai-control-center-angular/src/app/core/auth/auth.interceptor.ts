@@ -27,8 +27,19 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
 
   return next(authenticatedRequest).pipe(
     catchError((error: unknown) => {
-      if (!(error instanceof HttpErrorResponse) || error.status !== 401 || request.context.get(AUTH_RETRY)) {
+      if (
+        !(error instanceof HttpErrorResponse) ||
+        error.status !== 401 ||
+        request.context.get(AUTH_RETRY)
+      ) {
         return throwError(() => error);
+      }
+
+      const currentToken = accessTokens.token();
+      if (token && currentToken !== token) {
+        return currentToken
+          ? next(withBearerRetry(request, currentToken))
+          : throwError(() => error);
       }
 
       return from(authStore.refresh()).pipe(
@@ -38,15 +49,19 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
             return throwError(() => error);
           }
 
-          return next(request.clone({
-            context: request.context.set(AUTH_RETRY, true),
-            setHeaders: { Authorization: `Bearer ${refreshedToken}` },
-          }));
+          return next(withBearerRetry(request, refreshedToken));
         }),
       );
     }),
   );
 };
+
+function withBearerRetry(request: Parameters<HttpInterceptorFn>[0], token: string) {
+  return request.clone({
+    context: request.context.set(AUTH_RETRY, true),
+    setHeaders: { Authorization: `Bearer ${token}` },
+  });
+}
 
 function normalizeSameOrigin(url: string): URL | null {
   try {

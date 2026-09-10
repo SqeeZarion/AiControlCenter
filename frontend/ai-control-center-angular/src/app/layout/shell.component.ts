@@ -1,4 +1,5 @@
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { GatewayApiService, ServiceInfo } from '../core/api/gateway-api.service';
 import { RealtimeService } from '../core/realtime/realtime.service';
@@ -7,7 +8,7 @@ import { AuthStore } from '../core/auth/auth.store';
 
 @Component({
   selector: 'app-shell',
-  imports: [ConnectionStatusComponent],
+  imports: [ConnectionStatusComponent, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.scss',
 })

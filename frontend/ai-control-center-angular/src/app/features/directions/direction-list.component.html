@@ -1,0 +1,96 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">Control Plane</p>
+    <h2>Напрямки</h2>
+    <p>Динамічні контейнери для майбутніх агентів і workflows.</p>
+  </div>
+  @if (canManage()) {
+    <a class="primary" routerLink="/directions/new">Додати напрямок</a>
+  }
+</section>
+<section class="filters" aria-label="Фільтри напрямків">
+  <label>Пошук <input [(ngModel)]="search" (keyup.enter)="applyFilters()" maxlength="100" /></label>
+  <label
+    >Статус
+    <select [(ngModel)]="status" (change)="applyFilters()">
+      <option value="">Усі</option>
+      <option value="Active">Активні</option>
+      <option value="Inactive">Неактивні</option>
+    </select></label
+  >
+  <label class="checkbox"
+    ><input type="checkbox" [(ngModel)]="includeArchived" (change)="applyFilters()" /> Показати
+    архів</label
+  >
+  <button type="button" (click)="applyFilters()">Застосувати</button>
+</section>
+@if (success()) {
+  <p class="notice success" role="status">{{ success() }}</p>
+}
+@if (error()) {
+  <p class="notice error" role="alert">{{ error() }}</p>
+}
+@if (loading()) {
+  <p class="state">Завантаження напрямків…</p>
+} @else if (items().length === 0) {
+  <p class="state">Напрямків за вибраними фільтрами немає.</p>
+} @else {
+  <div class="direction-grid">
+    @for (direction of items(); track direction.id) {
+      <article [class.archived]="direction.isArchived">
+        <div class="card-heading">
+          <span class="icon">{{ direction.icon || '◈' }}</span>
+          <div>
+            <h3>{{ direction.name }}</h3>
+            <code>{{ direction.code }}</code>
+          </div>
+          <span class="badge" [class.active]="direction.status === 'Active'">{{
+            direction.status
+          }}</span>
+        </div>
+        <p>{{ direction.description || 'Опис не додано.' }}</p>
+        <dl>
+          <div>
+            <dt>Порядок</dt>
+            <dd>{{ direction.sortOrder }}</dd>
+          </div>
+          <div>
+            <dt>Оновлено</dt>
+            <dd>{{ direction.updatedAt | date: 'short' }}</dd>
+          </div>
+          <div>
+            <dt>Стан</dt>
+            <dd>{{ direction.isArchived ? 'Архівований' : 'Доступний' }}</dd>
+          </div>
+        </dl>
+        @if (canManage()) {
+          <div class="actions">
+            @if (!direction.isArchived) {
+              <a routerLink="/directions/{{ direction.id }}/edit">Редагувати</a
+              ><button type="button" (click)="toggleStatus(direction)">
+                {{ direction.status === 'Active' ? 'Деактивувати' : 'Активувати' }}</button
+              ><button type="button" (click)="move(direction, -1)" aria-label="Перемістити вище">
+                −</button
+              ><button type="button" (click)="move(direction, 1)" aria-label="Перемістити нижче">
+                +</button
+              ><button class="danger" type="button" (click)="archive(direction)">Архівувати</button>
+            } @else {
+              <button type="button" (click)="restore(direction)">Відновити</button>
+            }
+          </div>
+        }
+      </article>
+    }
+  </div>
+  @if (totalPages() > 1) {
+    <nav class="pagination" aria-label="Сторінки напрямків">
+      <button type="button" [disabled]="page() === 1" (click)="changePage(page() - 1)">
+        Назад
+      </button>
+      <span>Сторінка {{ page() }} з {{ totalPages() }} · усього {{ totalCount() }}</span>
+      <button type="button" [disabled]="page() === totalPages()" (click)="changePage(page() + 1)">
+        Далі
+      </button>
+    </nav>
+  }
+}

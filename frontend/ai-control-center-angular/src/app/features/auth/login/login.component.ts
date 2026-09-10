@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthStore } from '../../../core/auth/auth.store';
+import { safeLocalReturnUrl } from '../../../core/auth/safe-return-url';
 
 @Component({
   selector: 'app-login',
@@ -18,7 +19,10 @@ export class LoginComponent {
   readonly error = signal<string | null>(null);
   readonly passwordChanged = this.route.snapshot.queryParamMap.get('passwordChanged') === 'true';
   readonly form = new FormGroup({
-    email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email] }),
+    email: new FormControl('', {
+      nonNullable: true,
+      validators: [Validators.required, Validators.email],
+    }),
     password: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
   });
 
@@ -38,7 +42,7 @@ export class LoginComponent {
       }
 
       const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-      await this.router.navigateByUrl(returnUrl?.startsWith('/') ? returnUrl : '/');
+      await this.router.navigateByUrl(safeLocalReturnUrl(returnUrl) ?? '/');
     } catch {
       this.error.set('Не вдалося увійти. Перевірте дані та спробуйте ще раз.');
     } finally {

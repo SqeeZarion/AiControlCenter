@@ -100,7 +100,8 @@ public sealed class GatewayFoundationTests : IClassFixture<WebApplicationFactory
     public void YarpContainsAllPublicServiceRoutes()
     {
         var provider = factory.Services.GetRequiredService<IProxyConfigProvider>();
-        var routeIds = provider.GetConfig().Routes.Select(route => route.RouteId).ToHashSet();
+        var routes = provider.GetConfig().Routes;
+        var routeIds = routes.Select(route => route.RouteId).ToHashSet();
 
         Assert.Contains("identity", routeIds);
         Assert.Contains("identity-login", routeIds);
@@ -108,6 +109,14 @@ public sealed class GatewayFoundationTests : IClassFixture<WebApplicationFactory
         Assert.Contains("control-plane", routeIds);
         Assert.Contains("orchestrator", routeIds);
         Assert.Contains("integrations", routeIds);
+
+        var controlPlane = Assert.Single(routes, route => route.RouteId == "control-plane");
+        Assert.Equal("/api/control-plane/{**catch-all}", controlPlane.Match.Path);
+        Assert.Equal(SecurityPolicyNames.PasswordChanged, controlPlane.AuthorizationPolicy);
+        Assert.Contains(
+            controlPlane.Transforms ?? [],
+            transform => transform.TryGetValue("PathRemovePrefix", out var prefix)
+                && prefix == "/api/control-plane");
     }
 
     [Fact]

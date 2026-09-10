@@ -1,3 +1,4 @@
+using AiControlCenter.ControlPlane.Application;
 using AiControlCenter.ControlPlane.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +18,8 @@ public static class DependencyInjection
         services.AddDbContext<ControlPlaneDbContext>(options =>
             options.UseNpgsql(connectionString, npgsql =>
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "control_plane")));
+        services.AddScoped<IDirectionRepository, DirectionRepository>();
+        services.AddScoped<IControlPlaneUnitOfWork, ControlPlaneUnitOfWork>();
 
         return services;
     }

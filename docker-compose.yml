@@ -90,17 +90,7 @@ services:
     environment:
       <<: *dotnet-environment
       ConnectionStrings__IdentityDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD};Search Path=identity"
-      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
-      DataProtection__KeysPath: /var/lib/aicontrolcenter/data-protection
-    volumes:
-      - type: bind
-        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
-        target: /run/aicontrolcenter-keys/identity-public.pem
-        read_only: true
-      - identity_data_protection:/var/lib/aicontrolcenter/data-protection
     depends_on:
-      identity-data-protection-init:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
 
@@ -138,6 +128,26 @@ services:
       <<: *http-healthcheck
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
 
+  controlplane-migrations:
+    <<: *dotnet-service
+    restart: "no"
+    build:
+      context: .
+      dockerfile: src/Services/ControlPlane/AiControlCenter.ControlPlane.Api/Dockerfile
+    command: ["--migrate"]
+    environment:
+      <<: *dotnet-environment
+      ConnectionStrings__ControlPlaneDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${CONTROLPLANE_DB_USER};Password=${CONTROLPLANE_DB_PASSWORD};Search Path=control_plane"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   controlplane-api:
     <<: *dotnet-service
     build:
@@ -153,8 +163,8 @@ services:
         target: /run/aicontrolcenter-keys/identity-public.pem
         read_only: true
     depends_on:
-      postgres:
-        condition: service_healthy
+      controlplane-migrations:
+        condition: service_completed_successfully
     ports:
       - "5102:8080"
       - "5103:8081"

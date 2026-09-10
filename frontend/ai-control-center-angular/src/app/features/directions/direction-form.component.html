@@ -1,0 +1,48 @@
+<section class="form-page">
+  <a routerLink="/directions">← До списку</a>
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Control Plane</p>
+      <h2>{{ isEdit() ? 'Редагування напрямку' : 'Новий напрямок' }}</h2>
+    </div>
+  </div>
+  @if (error()) {
+    <p class="notice error" role="alert">{{ error() }}</p>
+  }
+  @if (loading()) {
+    <p class="state">Завантаження…</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <label>Назва <input formControlName="name" /></label>
+      @if (form.controls.name.touched && form.controls.name.invalid) {
+        <small>Вкажіть від 2 до 100 Unicode-символів.</small>
+      }
+      <label>Код <input formControlName="code" maxlength="64" placeholder="ai-notes" /></label>
+      @if (form.controls.code.touched && form.controls.code.invalid) {
+        <small>2–64 літери/цифри; слова можна розділяти пробілом, `_` або `-`.</small>
+      }
+      <label
+        >Опис <textarea formControlName="description" maxlength="1000" rows="5"></textarea>
+      </label>
+      <label
+        >Іконка <input formControlName="icon" maxlength="100" placeholder="◈ або коротка назва"
+      /></label>
+      <div class="form-row">
+        <label
+          >Статус
+          <select formControlName="status">
+            <option value="Active">Активний</option>
+            <option value="Inactive">Неактивний</option>
+          </select></label
+        ><label
+          >Порядок <input type="number" formControlName="sortOrder" min="0" max="100000"
+        /></label>
+      </div>
+      <div class="actions">
+        <button class="primary" type="submit" [disabled]="saving() || form.disabled">
+          {{ saving() ? 'Збереження…' : 'Зберегти' }}</button
+        ><a routerLink="/directions">Скасувати</a>
+      </div>
+    </form>
+  }
+</section>

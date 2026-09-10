@@ -5,6 +5,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { AccessTokenStore } from './access-token.store';
 import { AuthenticationState, AuthSessionDto, CurrentUserDto, LoginRequest } from './auth.models';
 import { AuthService } from './auth.service';
+import { safeLocalReturnUrl } from './safe-return-url';
 
 @Injectable({ providedIn: 'root' })
 export class AuthStore {
@@ -15,6 +16,7 @@ export class AuthStore {
   private readonly stateValue = signal<AuthenticationState>('unknown');
   private readonly userValue = signal<CurrentUserDto | null>(null);
   private refreshPromise?: Promise<boolean>;
+  private redirectOnRefreshFailure = false;
 
   readonly state = this.stateValue.asReadonly();
   readonly user = this.userValue.asReadonly();
@@ -27,7 +29,7 @@ export class AuthStore {
 
     try {
       await firstValueFrom(this.auth.initializeCsrf());
-      await this.refresh();
+      await this.refresh(false);
     } catch {
       await this.clearSession();
     }
@@ -39,13 +41,16 @@ export class AuthStore {
     return session.user;
   }
 
-  refresh(): Promise<boolean> {
+  refresh(redirectOnFailure = true): Promise<boolean> {
+    this.redirectOnRefreshFailure ||= redirectOnFailure;
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
 
-    this.refreshPromise = this.withCrossTabRefreshLock(() => this.refreshCore())
-      .finally(() => (this.refreshPromise = undefined));
+    this.refreshPromise = this.withCrossTabRefreshLock(() => this.refreshCore()).finally(() => {
+      this.refreshPromise = undefined;
+      this.redirectOnRefreshFailure = false;
+    });
     return this.refreshPromise;
   }
 
@@ -76,6 +81,13 @@ export class AuthStore {
       return true;
     } catch {
       await this.clearSession();
+      if (this.redirectOnRefreshFailure) {
+        const returnUrl = safeLocalReturnUrl(this.router.url);
+        await this.router.navigate(
+          ['/login'],
+          returnUrl ? { queryParams: { returnUrl } } : undefined,
+        );
+      }
       return false;
     }
   }

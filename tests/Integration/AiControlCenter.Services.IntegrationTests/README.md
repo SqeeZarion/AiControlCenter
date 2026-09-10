@@ -16,6 +16,7 @@ flowchart LR
 - PostgreSQL: окремі owner roles і заборона доступу до чужої schema.
 - RabbitMQ: test-only MassTransit publish/consume probe; він не є production contract.
 - ControlPlane gRPC: versioned service info та anonymous rejection.
+- ControlPlane Directions: migration `latest → 0 → latest`, constraints/indexes, persistence, create/read/update та archive/restore lifecycle, фільтри, optimistic concurrency і role matrix через фактичний API host та PostgreSQL Testcontainer.
 - Service hosts: liveness і захист direct Integrations service-info.
 
 Посилається на потрібні API/Infrastructure проєкти й використовує Testcontainers PostgreSQL/RabbitMQ, WebApplicationFactory, gRPC client, MassTransit і xUnit. Для повного запуску потрібен доступний Docker Engine.

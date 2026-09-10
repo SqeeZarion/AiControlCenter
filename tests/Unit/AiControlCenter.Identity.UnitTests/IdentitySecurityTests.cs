@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using AiControlCenter.Identity.Domain;
+using AiControlCenter.Identity.Infrastructure;
 using AiControlCenter.Identity.Infrastructure.Security;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -10,6 +13,24 @@ namespace AiControlCenter.Identity.UnitTests;
 public sealed class IdentitySecurityTests
 {
     private const int MaximumPublicPemSizeBytes = 64 * 1024;
+
+    [Fact]
+    public void MigrationCompositionRegistersPersistenceWithoutRsaKeyMaterial()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:IdentityDatabase"] =
+                    "Host=localhost;Database=identity;Username=identity;Password=not-used",
+            })
+            .Build();
+
+        services.AddIdentityPersistence(configuration);
+
+        Assert.Contains(services, descriptor => descriptor.ServiceType.Name == "IdentityDbContext");
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IdentityRsaKeySnapshot));
+    }
 
     [Theory]
     [InlineData(true)]

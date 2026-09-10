@@ -11,29 +11,11 @@
     </div>
   </header>
 
-  <section class="hero">
-    <div>
-      <p class="eyebrow">Gateway status</p>
-      <h2>{{ gateway()?.service ?? (checked() ? 'Gateway unavailable' : 'Checking gateway…') }}</h2>
-      <p>
-        Identity, role authorization and protected SignalR are active.
-        Agents, runs and business workflows are intentionally not implemented yet.
-      </p>
-    </div>
-    <dl>
-      <div><dt>API</dt><dd>{{ gateway() ? 'Connected' : 'Unavailable' }}</dd></div>
-      <div><dt>SignalR</dt><dd>{{ realtime.state() }}</dd></div>
-      <div><dt>Contract</dt><dd>{{ gateway()?.version ?? 'v1' }}</dd></div>
-    </dl>
-  </section>
-
-  <section class="services" aria-label="Foundation services">
-    @for (service of ['Identity', 'ControlPlane', 'Orchestrator', 'Worker', 'Integrations']; track service) {
-      <article>
-        <span>Protected host</span>
-        <h3>{{ service }}</h3>
-        <p>Business capabilities are intentionally deferred to their roadmap stage.</p>
-      </article>
-    }
-  </section>
+  <nav aria-label="Основна навігація">
+    <a routerLink="/directions" routerLinkActive="active">Напрямки</a>
+    <span>{{
+      gateway()?.service ?? (checked() ? 'Gateway unavailable' : 'Checking gateway…')
+    }}</span>
+  </nav>
+  <router-outlet />
 </main>

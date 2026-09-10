@@ -5,6 +5,7 @@
 - Браузер звертається до frontend Nginx, який обслуговує Angular SPA і проксіює `/api` та `/hubs` у Gateway.
 - Gateway маршрутизує REST через YARP до Identity, ControlPlane, Orchestrator та Integrations.
 - Gateway передає delegated Bearer token; кожен внутрішній API повторно перевіряє JWT і власні policies.
+- Angular працює з Directions через `/api/control-plane/v1/directions`; YARP знімає prefix `/api/control-plane` і передає запит до ControlPlane `/v1/directions` разом із Bearer token.
 - Orchestrator викликає versioned `ServiceInfo` ControlPlane напряму через HTTP/2 gRPC за Docker DNS і передає Bearer token у metadata.
 
 ```mermaid

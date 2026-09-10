@@ -98,16 +98,15 @@ describe('authInterceptor', () => {
     }
   });
 
-  it.each([
-    '/api/resource',
-    'api/resource',
-    `${globalThis.location.origin}/api/resource`,
-  ])('sends the platform token to same-origin URL %s', (url) => {
-    client.get(url).subscribe();
-    const request = http.expectOne(url);
-    expect(request.request.headers.get('Authorization')).toBe('Bearer old-token');
-    request.flush({});
-  });
+  it.each(['/api/resource', 'api/resource', `${globalThis.location.origin}/api/resource`])(
+    'sends the platform token to same-origin URL %s',
+    (url) => {
+      client.get(url).subscribe();
+      const request = http.expectOne(url);
+      expect(request.request.headers.get('Authorization')).toBe('Bearer old-token');
+      request.flush({});
+    },
+  );
 
   it('does not add Bearer to an absolute same-origin public auth URL', () => {
     const url = `${globalThis.location.origin}/api/identity/v1/auth/refresh`;
@@ -115,5 +114,28 @@ describe('authInterceptor', () => {
     const request = http.expectOne(url);
     expect(request.request.headers.has('Authorization')).toBe(false);
     request.flush({});
+  });
+
+  it.each([
+    '/api/identity/v1/auth/csrf',
+    '/api/identity/v1/auth/login',
+    '/api/identity/v1/auth/refresh',
+    '/api/identity/v1/auth/logout',
+  ])('does not refresh when public auth endpoint %s returns 401', async (url) => {
+    const response = firstValueFrom(client.post(url, {}));
+    const request = http.expectOne(url);
+    expect(request.request.headers.has('Authorization')).toBe(false);
+    request.flush(null, { status: 401, statusText: 'Unauthorized' });
+
+    await expect(response).rejects.toBeTruthy();
+    expect(refreshCalls).toBe(0);
+  });
+
+  it('does not refresh a protected request rejected with 403', async () => {
+    const response = firstValueFrom(client.get('/api/protected'));
+    http.expectOne('/api/protected').flush(null, { status: 403, statusText: 'Forbidden' });
+
+    await expect(response).rejects.toBeTruthy();
+    expect(refreshCalls).toBe(0);
   });
 });

@@ -24,7 +24,7 @@ flowchart TB
 
 ## ControlPlane
 
-Володіє схемою `control_plane` і надає versioned technical `ServiceInfo` gRPC service. Бізнес-entities/use cases ще відсутні; gRPC method захищений delegated user authentication.
+Володіє схемою `control_plane`, aggregate `Direction` і REST use cases каталогу напрямків. Також надає versioned technical `ServiceInfo` gRPC service. REST і gRPC захищені delegated user authentication; дані Directions не читаються напряму іншими сервісами.
 
 ## Orchestrator
 

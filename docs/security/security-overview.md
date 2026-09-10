@@ -70,8 +70,11 @@ Public key перевіряє математичний підпис, але не
 key не перетворює його на token issuer.
 
 У Docker private-key bind mount є лише в `identity-api`; інші runtime services
-мають read-only mount public key. Операційний процес генерації та ротації
-описаний у [Identity security operations](../architecture/identity-security.md).
+мають read-only mount public key. Одноразовий `identity-migrations` запускає
+окрему persistence-only composition: він отримує лише connection string і не
+монтує public/private RSA або Data Protection keys. Операційний процес генерації
+та ротації описаний у
+[Identity security operations](../architecture/identity-security.md).
 
 ## Перевірка JWT
 

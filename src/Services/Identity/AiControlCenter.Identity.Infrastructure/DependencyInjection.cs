@@ -14,12 +14,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("IdentityDatabase")
-            ?? throw new InvalidOperationException("ConnectionStrings:IdentityDatabase is required.");
-
-        services.AddDbContext<IdentityDbContext>(options =>
-            options.UseNpgsql(connectionString, npgsql =>
-                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "identity")));
+        services.AddIdentityPersistence(configuration);
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
@@ -81,5 +76,18 @@ public static class DependencyInjection
         services.AddSingleton<IAccessTokenIssuer, RsaAccessTokenIssuer>();
 
         return keySnapshot!;
+    }
+
+    public static IServiceCollection AddIdentityPersistence(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("IdentityDatabase")
+            ?? throw new InvalidOperationException("ConnectionStrings:IdentityDatabase is required.");
+
+        services.AddDbContext<IdentityDbContext>(options =>
+            options.UseNpgsql(connectionString, npgsql =>
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "identity")));
+        return services;
     }
 }

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+using AiControlCenter.ControlPlane.Application;
 using AiControlCenter.ControlPlane.Api;
 using AiControlCenter.ControlPlane.Api.Grpc;
 using AiControlCenter.ControlPlane.Infrastructure;
@@ -5,24 +7,36 @@ using AiControlCenter.ControlPlane.Infrastructure.Persistence;
 using AiControlCenter.Observability;
 using AiControlCenter.Security;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddExceptionHandler<ControlPlaneExceptionHandler>();
 builder.Services.AddApiFoundation();
 //Метод реєструє повну JWT authentication для поточного сервісу.
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 builder.Services.AddPlatformAuthorization();
+builder.Services.AddControlPlaneApplication();
+builder.Services.AddValidatorsFromAssemblyContaining<UpdateDirectionRequest>();
 builder.Services.AddControlPlaneInfrastructure(builder.Configuration);
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ControlPlaneDbContext>("control-plane-database", tags: ["ready"]);
-builder.Services.AddValidatorsFromAssemblyContaining<ControlPlaneApiMarker>();
 builder.Services.AddGrpc();
 builder.Services.AddGrpcReflection();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+if (args.Contains("--migrate", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<ControlPlaneDbContext>().Database.MigrateAsync();
+    return;
+}
 
 app.UseApiFoundation();
 app.UseAuthentication();
@@ -36,6 +50,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDefaultHealthEndpoints();
+app.MapDirectionEndpoints();
 app.MapGrpcService<ServiceInfoGrpcService>()
     .RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
 app.MapGet("/service-info", (IHostEnvironment environment) => Results.Ok(new
