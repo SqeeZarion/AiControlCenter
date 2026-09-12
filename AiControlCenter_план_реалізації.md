@@ -394,7 +394,11 @@ API-ключі не можна повертати на frontend або збер�
 - інформація про того, хто підтвердив або відхилив дію;
 - продовження workflow після підтвердження.
 
-### Dashboard
+### Dashboard та Operations Center
+
+`Operations Center` дає оперативний live-погляд на систему: топологію сервісів, з'єднання, черги, Workers, активні Runs і RunSteps. Він з'являється після реалізації Agents, Runs і Worker, коли вже є реальні стани та події для відображення.
+
+Розширений `Dashboard` додається пізніше й відповідає за історичну аналітику:
 
 - активні агенти;
 - запуски за період;
@@ -403,6 +407,8 @@ API-ключі не можна повертати на frontend або збер�
 - активні Workers;
 - запити, що очікують підтвердження;
 - статистика використання OpenAI та приблизні витрати.
+
+Live-екран використовує тільки фактичні health/status/telemetry дані. Якщо сервіс не відповідає, стан переходить у `Disconnected` або `Unknown`; останнє успішне значення не можна нескінченно показувати як `Connected`.
 
 ## 6. Основні сутності бази даних
 
@@ -450,6 +456,8 @@ API-ключі не можна повертати на frontend або збер�
 
 ### Етап 0. Підготовка репозиторію
 
+**Статус: завершено.**
+
 - перевірити Git-репозиторій `AiControlCenter`;
 - створити solution і базову структуру папок;
 - додати `.gitignore`, `.editorconfig`, `README.md` і `.env.example`;
@@ -459,6 +467,8 @@ API-ключі не можна повертати на frontend або збер�
 Результат: проєкт збирається та запускається однією командою через Docker Compose.
 
 ### Етап 1. Архітектурний фундамент
+
+**Статус: завершено.**
 
 - зафіксувати межі Identity, ControlPlane, Orchestrator, Worker та Integrations;
 - створити окремі .NET-проєкти й Dockerfile для кожного сервісу;
@@ -478,6 +488,8 @@ API-ключі не можна повертати на frontend або збер�
 
 ### Етап 2. Авторизація та ролі
 
+**Статус: завершено.**
+
 - реалізувати User і Role в Identity Service;
 - додати JWT та refresh tokens через Identity Service;
 - налаштувати перевірку токенів у Gateway та внутрішніх сервісах;
@@ -488,6 +500,8 @@ API-ключі не можна повертати на frontend або збер�
 Результат: доступ до системи контролюється ролями.
 
 ### Етап 3. Повна реалізація Directions
+
+**Статус: завершено.**
 
 - реалізувати Direction у Control Plane Service;
 - створити окрему міграцію його PostgreSQL-схеми;
@@ -503,6 +517,8 @@ API-ключі не можна повертати на frontend або збер�
 
 ### Етап 4. Agents, Runs і Worker
 
+**Статус: наступний етап реалізації.**
+
 - реалізувати AgentDefinition у Control Plane Service;
 - реалізувати AgentRun і RunStep в Orchestrator Service;
 - створити gRPC-контракти між Control Plane, Orchestrator та Worker;
@@ -513,6 +529,33 @@ API-ключі не можна повертати на frontend або збер�
 - створити сторінку запусків і перегляду журналу.
 
 Результат: користувач може запустити тестового агента й побачити виконання в реальному часі.
+
+### Етап 4.1. Візуальний центр керування та live observability
+
+Цей етап виконується після стабілізації `Agents + Runs + Worker`. Його мета — перетворити головну сторінку на зрозумілий візуальний центр, де видно структуру системи, стан сервісів і рух конкретного запуску в реальному часі.
+
+- створити головну сторінку `Operations Center` у стилі технологічної карти або command center;
+- показати вузли `Gateway`, `Identity`, `ControlPlane`, `Orchestrator`, `RabbitMQ`, `Worker`, `Integrations`, PostgreSQL, Agent Definitions і активні Runs;
+- візуально показувати зв'язки та фактичний шлях виконання `Gateway → Orchestrator → RabbitMQ → Worker → Orchestrator → SignalR`;
+- додати стани `Connected`, `Degraded`, `Disconnected` і `Unknown` з часом останнього успішного сигналу;
+- показувати реальні метрики: доступність сервісів, latency health-запитів, активні та queued Runs, успішні й невдалі запуски, активні Workers, RabbitMQ consumers і доступну queue depth;
+- відображати поточний Run, його прогрес, активний RunStep, останні безпечні журнальні події та terminal result;
+- оновлювати стан через SignalR, а після reconnect виконувати REST reconciliation, оскільки SignalR не є джерелом істини;
+- додати bounded polling із backoff для health/status, щоб коротка втрата SignalR не заморожувала інтерфейс;
+- при недоступному backend залишати оболонку Angular на екрані та показувати `Disconnected`, останній відомий стан і час останнього з'єднання;
+- відрізняти мережеву недоступність від завершення authentication session: offline, timeout або `503` не повинні автоматично викидати користувача з акаунта; logout виконується лише після підтвердженої невідновної auth-помилки;
+- після відновлення backend автоматично перейти з `Disconnected` до актуального стану без перезавантаження сторінки;
+- зробити вузли інтерактивними: відкривати деталі сервісу, агента або Run, але не показувати секрети, connection strings чи необмежені логи;
+- додати локальні оптимізовані текстури, світіння, анімацію потоків і 2D/2.5D-візуалізацію; WebGL або Three.js використовувати лише після невеликого proof of concept, якщо це не погіршує доступність і швидкість;
+- надати спрощений DOM/CSS fallback, підтримку `prefers-reduced-motion`, keyboard navigation, достатній contrast і responsive layout;
+- зберегти звичайне меню `Напрямки / Агенти / Запуски`; візуальний центр відкривати як маршрут `Головна`, а не використовувати його замість робочих таблиць і форм;
+- не вигадувати метрики на frontend: кожне значення повинно походити з health/status API, OpenTelemetry, RabbitMQ management/transport integration або persisted даних Orchestrator;
+- не вбудовувати Grafana як основний інтерфейс панелі; Prometheus/Grafana можна додати пізніше для поглибленої технічної observability;
+- написати unit, component, integration і реальний reconnect/offline test.
+
+Важливе обмеження локального запуску: якщо вимкнути весь Docker Compose разом із контейнером, який віддає Angular, нова вкладка або повне оновлення сторінки не завантажаться. Щоб Operations Center залишався доступним під час повного вимкнення backend-контейнерів, Angular потрібно запускати окремо через development server або окремий статичний frontend host. Якщо сторінка вже завантажена, вона повинна коректно перейти у стан `Disconnected`.
+
+Результат: користувач бачить живу карту AiControlCenter, реальний рух тестового AgentRun, стан сервісів і черг, а при втраті з'єднання отримує зрозумілий `Disconnected` замість помилкового logout або застарілого `Connected`.
 
 ### Етап 5. OpenAI та інструменти агента
 
@@ -619,7 +662,7 @@ API-ключі не можна повертати на frontend або збер�
 ### Етап 9. Schedules, Dashboard та аудит
 
 - додати запуски за розкладом;
-- реалізувати Dashboard;
+- розширити оперативний Operations Center історичним Dashboard;
 - додати AuditLog;
 - показувати статистику, помилки та витрати;
 - додати фільтри й пошук у запусках.
@@ -657,6 +700,7 @@ API-ключі не можна повертати на frontend або збер�
 - внутрішню взаємодію через gRPC;
 - RabbitMQ + MassTransit для фонових завдань;
 - SignalR-прогрес;
+- Operations Center зі станами сервісів, активними Runs і коректним `Disconnected`;
 - підключення OpenAI;
 - контракти Agent Runtime Adapter;
 - тестове підключення n8n, OpenClaw і Hermes без перенесення в них основної бізнес-логіки;
@@ -793,6 +837,68 @@ flowchart TD
 8. Gateway передає оновлений статус в Angular через SignalR.
 
 На цьому етапі потрібно забезпечити ідемпотентність обробників, повторні спроби для дозволених помилок та захист від подвійного виконання одного запуску.
+
+### 11.3.1. Візуальний Operations Center
+
+Після того як тестовий AgentRun проходить повний шлях через Orchestrator, RabbitMQ і Worker, потрібно додати окремий візуальний шар спостереження. Він не керує доменними станами та не замінює сторінки Agents і Runs.
+
+#### Джерела даних
+
+- persisted `AgentRun` і `RunStep` з Orchestrator REST API;
+- health/readiness/status endpoints сервісів;
+- події SignalR про зміни Run і RunStep;
+- агреговані технічні метрики з чітко визначеним часом отримання;
+- RabbitMQ queue/consumer metrics тільки через захищений backend adapter;
+- OpenTelemetry metrics і traces після їх фактичного підключення.
+
+Frontend не звертається напряму до RabbitMQ management API, PostgreSQL або внутрішніх контейнерних адрес.
+
+#### Модель стану підключення
+
+| Стан | Значення |
+| --- | --- |
+| `Connected` | Остання перевірка успішна й не старіша за визначений freshness interval |
+| `Degraded` | Сервіс відповідає, але залежність або частина функцій має проблему |
+| `Disconnected` | Підтверджена мережева помилка, timeout або кілька невдалих перевірок |
+| `Unknown` | Ще немає достатньо даних або стан застарів після паузи вкладки |
+
+Кожна картка показує `lastCheckedAt` і `lastSuccessfulAt`. Після перевищення freshness interval старий зелений стан повинен змінитися на `Unknown` або `Disconnected` відповідно до результатів перевірок.
+
+#### Поведінка при втраті з'єднання
+
+1. SignalR переходить у reconnect із bounded backoff.
+2. REST health/status перевірки продовжуються з обмеженою частотою.
+3. Інтерфейс показує останній відомий snapshot як застарілий, а не як актуальний.
+4. Network error, timeout, `502` або `503` не очищає auth session.
+5. Після reconnect клієнт перечитує Runs і service status через REST.
+6. Тільки підтверджена невідновна auth-відповідь запускає session-expired flow.
+
+#### Візуальна реалізація
+
+Початкова реалізація має бути 2D/2.5D, щоб забезпечити стабільну роботу на звичайному ноутбуці. Допускаються локальні текстури, градієнти, світіння, частинки та анімовані лінії потоку. Three.js/WebGL додається тільки після POC із такими критеріями:
+
+- плавна робота на цільовому обладнанні;
+- lazy loading важкого renderer;
+- відсутність блокування основних сторінок;
+- очищення animation loop і GPU resources;
+- DOM/CSS fallback;
+- keyboard accessibility;
+- `prefers-reduced-motion`;
+- відсутність зовнішнього CDN або untracked third-party assets.
+
+#### Перевірки
+
+- status reducer і freshness transitions;
+- `Connected → Disconnected → Connected`;
+- SignalR reconnect із REST reconciliation;
+- недоступний backend без logout;
+- справжня session expiration із переходом на login;
+- stale і duplicate events;
+- відсутність доступу до чужих Run;
+- responsive та reduced-motion режими;
+- cleanup subscriptions, timers і renderer;
+- bounded memory/CPU use під час тривалого відкриття сторінки;
+- Docker/E2E із поетапним вимкненням окремого backend-сервісу та його відновленням.
 
 ### 11.4. Підключення OpenAI
 
@@ -1269,6 +1375,7 @@ n8n можна використовувати для допоміжних гіл
 → Runs
 → Orchestrator
 → RabbitMQ + MassTransit + Worker
+→ Візуальний Operations Center і live observability
 → OpenAI
 → Agent Runtime Adapters: n8n + OpenClaw + Hermes
 → Autonomous Agent Loop: Planner + Tools + Policy + Evaluator + Budgets
