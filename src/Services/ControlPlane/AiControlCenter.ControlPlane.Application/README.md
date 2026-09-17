@@ -1,6 +1,6 @@
 # AiControlCenter.ControlPlane.Application
 
-Application layer ControlPlane координує всі use cases `Direction` через `DirectionApplicationService`, repository/unit-of-work ports, DTO, commands, queries та FluentValidation validators.
+Application layer ControlPlane координує use cases `Direction` і `AgentDefinition` через services, repository/unit-of-work ports, DTO, commands, queries та FluentValidation validators.
 
 ```mermaid
 flowchart LR
@@ -8,7 +8,7 @@ flowchart LR
     Application --> Domain["ControlPlane.Domain"]
 ```
 
-Реалізовано paged список із фільтрами й metadata, читання за ID, створення, атомарне редагування всіх editable fields, окремі quick actions status/sort order, архівування та відновлення. Application не залежить від ASP.NET Core або EF Core; version передається як звичайний `uint`, а persistence adapter реалізує optimistic concurrency.
+Для AgentDefinition реалізовано paged search/status/direction filter, CRUD без hard delete, status/archive/restore і runnable snapshot. Application не залежить від ASP.NET Core або EF Core; version передається як `uint`, а persistence adapter реалізує optimistic concurrency.
 
 `ProjectReference`: `ControlPlane.Domain`. FluentValidation забезпечує однакову перевірку в endpoint filter і application boundary.
 

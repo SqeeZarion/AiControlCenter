@@ -6,6 +6,7 @@ namespace AiControlCenter.ControlPlane.Infrastructure.Persistence;
 public sealed class ControlPlaneDbContext(DbContextOptions<ControlPlaneDbContext> options) : DbContext(options)
 {
     public DbSet<Direction> Directions => Set<Direction>();
+    public DbSet<AgentDefinition> AgentDefinitions => Set<AgentDefinition>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

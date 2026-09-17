@@ -1,0 +1,71 @@
+<section class="form-page">
+  <a routerLink="/runs">← До запусків</a>
+  @if (error()) {
+    <p class="notice error" role="alert">{{ error() }}</p>
+  }
+  @if (loading()) {
+    <p class="state">Завантаження запуску…</p>
+  } @else if (run(); as item) {
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Run {{ item.id }}</p>
+        <h2>{{ item.agentName }}</h2>
+        <p>{{ item.directionName }} · {{ item.agentCode }}</p>
+      </div>
+      <span class="badge" [class.active]="item.status === 'Succeeded'">{{
+        statusLabel(item.status)
+      }}</span>
+    </div>
+    <article>
+      <dl>
+        <div>
+          <dt>Створено</dt>
+          <dd>{{ formatDate(item.createdAt) }}</dd>
+        </div>
+        <div>
+          <dt>Розпочато</dt>
+          <dd>{{ formatDate(item.startedAt) }}</dd>
+        </div>
+        <div>
+          <dt>Завершено</dt>
+          <dd>{{ formatDate(item.completedAt) }}</dd>
+        </div>
+        <div>
+          <dt>Ревізія</dt>
+          <dd>{{ item.revision }}</dd>
+        </div>
+        <div>
+          <dt>Correlation ID</dt>
+          <dd>
+            <code>{{ item.correlationId }}</code>
+          </dd>
+        </div>
+      </dl>
+      @if (item.result) {
+        <p class="notice success">{{ item.result }}</p>
+      }
+      @if (item.error) {
+        <p class="notice error">{{ item.error }}</p>
+      }
+    </article>
+    <h3 class="section-title">Кроки</h3>
+    @if (item.steps.length === 0) {
+      <p class="state">Worker ще не повідомив про кроки.</p>
+    } @else {
+      <ol class="timeline">
+        @for (step of item.steps; track step.id) {
+          <li>
+            <div>
+              <strong>{{ step.sequence }}. {{ step.name }}</strong
+              ><span class="badge" [class.active]="step.status === 'Succeeded'">{{
+                statusLabel(step.status)
+              }}</span>
+            </div>
+            <p>{{ step.log || 'Журнал порожній.' }}</p>
+            <small>{{ formatDate(step.updatedAt) }}</small>
+          </li>
+        }
+      </ol>
+    }
+  }
+</section>

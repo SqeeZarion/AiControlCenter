@@ -1,3 +1,4 @@
+using AiControlCenter.Orchestrator.Application;
 using AiControlCenter.Orchestrator.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +18,8 @@ public static class DependencyInjection
         services.AddDbContext<OrchestratorDbContext>(options =>
             options.UseNpgsql(connectionString, npgsql =>
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "orchestrator")));
+        services.AddScoped<IAgentRunRepository, AgentRunRepository>();
+        services.AddScoped<IOrchestratorUnitOfWork, OrchestratorUnitOfWork>();
 
         return services;
     }

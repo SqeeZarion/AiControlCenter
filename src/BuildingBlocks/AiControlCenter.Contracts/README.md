@@ -1,6 +1,6 @@
 # AiControlCenter.Contracts
 
-Мінімальний .NET class library для спільних асинхронних transport contracts. Зараз він містить лише `ContractVersion.V1`; бізнес-команд, events і consumers у репозиторії немає.
+.NET class library для спільних versioned асинхронних transport contracts. Містить bounded `ExecuteTestAgentRunV1` та `RunStatusChangedV1`; entities й application use cases тут заборонені.
 
 ## Межі та місце в системі
 
@@ -10,7 +10,8 @@
 flowchart LR
     Orchestrator["Orchestrator API"] --> Contracts["AiControlCenter.Contracts"]
     Worker["Worker"] --> Contracts
-    Contracts --> Version["ContractVersion.V1"]
+    Contracts --> Command["ExecuteTestAgentRunV1"]
+    Contracts --> Event["RunStatusChangedV1"]
 ```
 
 ## Компоненти й залежності

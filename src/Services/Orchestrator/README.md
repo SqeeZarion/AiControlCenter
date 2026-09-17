@@ -1,12 +1,13 @@
 # Orchestrator
 
-Orchestrator має ізольований API, PostgreSQL-схему, MassTransit transport і прямий технічний gRPC-клієнт ControlPlane. Бізнес-оркестрація, commands, events і consumers ще відсутні.
+Orchestrator володіє `AgentRun`/`RunStep`, переходами стану та PostgreSQL transactional outbox. Він перевіряє runnable Agent snapshot через ControlPlane gRPC, асинхронно ставить Test execution у RabbitMQ і приймає progress Worker через окремо authenticated gRPC.
 
 ```mermaid
 flowchart LR
     Gateway --> Api["Orchestrator.Api"]
-    Api -->|"gRPC ServiceInfo"| ControlPlane
-    Api -.->|"MassTransit transport"| RabbitMQ
+    Api -->|"gRPC AgentCatalog + delegated JWT"| ControlPlane
+    Api -->|"EF outbox"| RabbitMQ
+    Worker -->|"RunProgress gRPC"| Api
     Api --> Application
     Api --> Infrastructure
     Infrastructure --> Db["PostgreSQL orchestrator"]
@@ -18,3 +19,5 @@ flowchart LR
 - [Infrastructure](AiControlCenter.Orchestrator.Infrastructure/README.md)
 
 [Комунікація](../../../docs/architecture/communication.md) · [Межі сервісів](../../../docs/architecture/service-boundaries.md)
+
+[Agents, Runs і Worker](../../../docs/architecture/agents-runs-worker.md)

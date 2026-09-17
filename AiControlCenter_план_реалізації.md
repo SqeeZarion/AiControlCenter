@@ -8,7 +8,7 @@
 - додавати й налаштовувати агентів;
 - запускати агентів вручну або за розкладом;
 - об'єднувати дії у workflows;
-- підключати OpenAI, YouTube, TikTok, Telegram, n8n, OpenClaw, Hermes та інші зовнішні сервіси;
+- підключати GitHub Copilot, OpenAI, xAI/Grok, YouTube, TikTok, Telegram, n8n, OpenClaw, Hermes та інші зовнішні сервіси;
 - переглядати статуси запусків, результати, помилки та журнали;
 - підтверджувати критичні дії через модуль Approvals;
 - керувати доступом користувачів за ролями.
@@ -30,7 +30,7 @@
 - `Control Plane Service` — Directions, Agent Definitions, Workflows і Schedules;
 - `Orchestrator Service` — керування Runs і послідовністю виконання кроків;
 - `Worker Service` — виконання AI-завдань та довгих операцій;
-- `Integration Service` — OpenAI, YouTube, TikTok, Telegram та інші зовнішні API;
+- `Integration Service` — GitHub Copilot, OpenAI, xAI/Grok, YouTube, TikTok, Telegram та інші зовнішні API;
 - `Agent Runtime Adapters` — єдиний шар підключення n8n, OpenClaw і Hermes Agent до нашого Orchestrator.
 
 Кожен сервіс запускається окремим процесом і Docker-контейнером. На початку вони можуть використовувати один сервер PostgreSQL, але кожен сервіс володіє своєю схемою та не читає таблиці іншого сервісу напряму.
@@ -101,7 +101,11 @@ flowchart TD
 
 ### AI
 
-- OpenAI Responses API для агентів, генерації та аналізу контенту;
+- GitHub Copilot SDK як основний AI-провайдер для особистого й навчального використання в межах доступних GitHub AI Credits;
+- OpenAI Responses API та xAI/Grok API як незалежні платні провайдери, які можна ввімкнути пізніше без зміни доменної логіки;
+- маршрутизація AI-запитів через універсальний provider layer із конфігурованим порядком провайдерів; для поточного особистого запуску першим є GitHub Copilot;
+- `DeterministicTestProvider` як обов'язковий безмережевий провайдер для unit, integration, Docker E2E та CI;
+- платний fallback на OpenAI або Grok за замовчуванням вимкнений і дозволяється лише після явного ввімкнення провайдера, наявності ключа, бюджету та підтвердженої quota/rate/availability помилки;
 - Hermes Agent від Nous Research для глибокого аналізу, довготривалої пам'яті, досліджень і делегування задач підлеглим агентам;
 - OpenClaw як постійно активний персональний агент, multi-agent router та канал доступу через Telegram, Discord, WhatsApp і WebChat;
 - n8n для візуальних інтеграційних workflows, webhooks, розкладів і зв'язування зовнішніх сервісів;
@@ -370,14 +374,22 @@ Orchestrator залишається власником стану й політ�
 
 Модуль містить налаштування зовнішніх підключень:
 
+- GitHub Copilot SDK / GitHub OAuth;
 - OpenAI;
+- xAI/Grok;
 - YouTube;
 - TikTok;
 - Telegram;
 - n8n;
 - інші REST API та webhooks.
 
-API-ключі не можна повертати на frontend або зберігати у відкритому вигляді. В адмінці показується лише назва інтеграції, стан підключення та масковане значення секрету.
+У профілі користувача потрібно додати розділ `AI-провайдери`. GitHub Copilot підключається через явний GitHub OAuth redirect/callback від імені поточного користувача. OpenAI та xAI підключаються через окремі project-scoped API keys, створені користувачем у кабінеті відповідного провайдера; паролі від зовнішніх сервісів AiControlCenter не запитує і не отримує.
+
+API-ключі й OAuth credentials не можна повертати на frontend, зберігати у відкритому вигляді, `localStorage`, logs або telemetry. Вони зберігаються server-side у захищеному сховищі, ізолюються за користувачем, після запису відображаються лише масковано й можуть бути замінені, відкликані або видалені. Один користувач не може використовувати Copilot-підписку чи API key іншого користувача.
+
+Для кожного AI-підключення профіль показує стан, власника, доступні моделі, останню синхронізацію, usage, quota/credits, витрати та balance availability. Кожне значення позначається як `ProviderReported`, `Estimated` або `Unavailable`; відсутність API для точного залишку не можна маскувати вигаданим балансом.
+
+AiControlCenter не приймає оплату, не зберігає платіжні картки й не має внутрішнього гаманця. OpenAI та xAI користувач поповнює безпосередньо у відповідних сервісах. Панель лише синхронізує доступні provider data, дає посилання на офіційний billing portal, блокує недоступні маршрути та після зовнішнього поповнення дозволяє повторну перевірку й продовження Run.
 
 ### Schedules
 
@@ -406,7 +418,7 @@ API-ключі не можна повертати на frontend або збер�
 - останні помилки;
 - активні Workers;
 - запити, що очікують підтвердження;
-- статистика використання OpenAI та приблизні витрати.
+- статистика використання кожного AI-провайдера: GitHub AI Credits, provider-reported або estimated input/cached/output tokens, моделі, тривалість, фактичні витрати та приблизні витрати OpenAI/Grok.
 
 Live-екран використовує тільки фактичні health/status/telemetry дані. Якщо сервіс не відповідає, стан переходить у `Disconnected` або `Unknown`; останнє успішне значення не можна нескінченно показувати як `Connected`.
 
@@ -418,6 +430,10 @@ Live-екран використовує тільки фактичні health/st
 - `Direction`;
 - `Feature`;
 - `AgentDefinition`;
+- `AiProviderConnection`;
+- `ModelRoute`;
+- `AiExecutionAttempt`;
+- `AiUsageRecord`;
 - `AgentTool`;
 - `AgentRuntimeProvider`;
 - `ExternalAgentBinding`;
@@ -448,6 +464,9 @@ Live-екран використовує тільки фактичні health/st
 - один Direction має багато Features, Agents і Workflows;
 - один Workflow має багато WorkflowSteps;
 - один Agent може використовувати багато Tools та Integrations;
+- один користувач має власні ізольовані AI provider connections;
+- один Agent або routing policy має впорядкований список ModelRoutes;
+- один RunStep може мати кілька послідовних AiExecutionAttempts під час контрольованого fallback;
 - один Agent або Workflow має багато Runs;
 - один Run має багато RunSteps;
 - ApprovalRequest належить до конкретного Run або RunStep.
@@ -517,7 +536,7 @@ Live-екран використовує тільки фактичні health/st
 
 ### Етап 4. Agents, Runs і Worker
 
-**Статус: наступний етап реалізації.**
+**Статус: реалізовано та перевірено.**
 
 - реалізувати AgentDefinition у Control Plane Service;
 - реалізувати AgentRun і RunStep в Orchestrator Service;
@@ -557,16 +576,57 @@ Live-екран використовує тільки фактичні health/st
 
 Результат: користувач бачить живу карту AiControlCenter, реальний рух тестового AgentRun, стан сервісів і черг, а при втраті з'єднання отримує зрозумілий `Disconnected` замість помилкового logout або застарілого `Connected`.
 
-### Етап 5. OpenAI та інструменти агента
+### Етап 5. AI-провайдери та інструменти агента
 
-- підключити OpenAI Responses API;
 - створити універсальний інтерфейс AI-провайдера;
+- підключити GitHub Copilot SDK як провайдер, що може використовувати доступні GitHub AI Credits авторизованого користувача;
+- підключити OpenAI Responses API як незалежний основний або резервний провайдер;
+- підключити xAI/Grok через окремий адаптер, не прив'язуючи доменний код до OpenAI-compatible transport;
+- додати `DeterministicTestProvider`, який не виконує зовнішніх викликів, повертає відтворювані відповіді та usage-метадані й використовується в автоматичних тестах;
+- замість одного `FallbackModel` реалізувати впорядкований список `ModelRoute`: одна основна та кілька резервних моделей із priority, provider connection, model ID або `Auto`, режимом переходу, дозволеними причинами fallback, max attempts і локальним safety cap;
+- підтримати базові policy presets `GitHubOnly`, `OpenAIOnly`, `GrokOnly`, `GitHubThenOpenAI` та `GitHubThenGrok`, але зберігати routing як конфігурований список без жорстко зашитої кількості чи послідовності провайдерів;
+- для GitHub Copilot динамічно отримувати каталог моделей, доступних конкретному авторизованому акаунту; дозволити `Auto` як рекомендований default і ручний вибір будь-якої моделі, фактично повернутої Copilot SDK, включно з Grok, якщо вона доступна цьому акаунту;
+- виконувати fallback тільки для підтвердженого вичерпання credits/quota, rate limit або тимчасової недоступності, дозволеної політикою; validation, permission, content-safety, cancellation та помилки інструментів не повинні автоматично запускати платний fallback;
 - додати налаштування моделі й промпту;
 - реалізувати дозволені Tools;
-- зберігати використання токенів, тривалість і приблизну вартість;
+- зберігати провайдера, фактичну модель, request count, input/cached/output tokens, GitHub AI Credits, тривалість, фактичну вартість і розрахункову вартість аналогічного запуску через OpenAI та Grok для кожної спроби;
+- якщо Copilot SDK не повертає точні token usage або AI Credits, зберігати локальну оцінку з ознакою `Estimated`, не видаючи її за provider-reported значення;
+- реалізувати `AiExecutionAttempt` або еквівалентний журнал спроб із correlation/idempotency key, щоб timeout чи невизначений результат не спричинили подвійне виконання та списання credits у двох провайдерів;
+- додати денні й місячні бюджети, ліміти запуску та можливість повністю заборонити платний fallback;
+- зберігати GitHub OAuth/API credentials, OpenAI API key і xAI API key лише на сервері в захищеному сховищі та ніколи не повертати їх на frontend;
+- для кількох користувачів виконувати Copilot-запити від імені того користувача, який явно авторизував GitHub, а не непомітно витрачати особисту студентську квоту власника системи;
+- додати у профіль користувача підключення/відключення GitHub OAuth, write-only введення або заміну OpenAI/xAI API keys, перевірку credentials, masked fingerprint, available models, last sync, usage, витрати й provider-reported/estimated/unavailable balance або quota;
+- не реалізовувати внутрішнє поповнення AiControlCenter: користувач фінансує OpenAI/xAI у кабінеті провайдера, а після поповнення запускає refresh/sync і відновлює призупинений Run із checkpoint;
 - додати обмеження доступу до інструментів.
 
-Результат: AgentDefinition перетворюється з конфігурації на реально виконуваного AI-агента.
+#### Перемикання моделей і вичерпання коштів або квоти
+
+- перевіряти стан credentials, model availability, quota/balance signal, rate limits і локальні safety caps перед кожним зовнішнім AI-викликом, а не лише на початку Run;
+- між AI-викликами або checkpoint-кроками дозволяти перехід до наступного `ModelRoute`, якщо користувач явно дозволив автоматичний fallback;
+- не вважати можливим безшовне перенесення вже активної генерації між провайдерами: якщо stream перервано, зберегти partial output, usage, request/correlation IDs і результат усіх уже виконаних tools, завершити поточний `AiExecutionAttempt` та створити нову спробу того самого логічного кроку на резервній моделі;
+- передавати резервній моделі початкову задачу, підтверджений контекст, checkpoint, tool results і позначений partial output; не видавати дві provider attempts за один безперервний виклик;
+- не робити blind retry або fallback після невизначеного timeout, доки не встановлено результат першої спроби настільки, наскільки це дозволяє API провайдера;
+- якщо дозволеного доступного маршруту немає, переводити Run у `PausedProviderUnavailable` або `PausedInsufficientFunds`, зберігати виконані кроки та повідомляти користувача через UI/SignalR;
+- після зовнішнього поповнення або відновлення quota повторно синхронізувати provider connection і дозволити `Resume` із останнього безпечного checkpoint, а не починати весь Run заново;
+- обмежити кількість переходів і заборонити циклічний routing, щоб агент не міг нескінченно перемикатися між моделями або створювати неконтрольовані витрати;
+- журнал Run повинен показувати для кожної спроби provider, model, priority, status, usage/cost, причину переходу та чи був результат `ProviderReported` або `Estimated`.
+
+#### Примітка про оплату та перевірку Етапу 5
+
+На поточному етапі власник проєкту не поповнює баланс OpenAI або xAI. Це не скорочує функціональний обсяг реалізації: адаптери OpenAI і Grok, routing, fallback, usage accounting, budgets, UI, конфігурація, помилки й документація реалізуються повністю.
+
+- усі автоматичні unit, integration, contract, Docker E2E та CI-перевірки повинні проходити без платних API-ключів через `DeterministicTestProvider`, контрольовані HTTP/gRPC stubs і test doubles;
+- реальна ручна AI-перевірка виконується насамперед через GitHub Copilot Student/поточну Copilot-підписку в межах доступних GitHub AI Credits;
+- у Development і Test платні провайдери за замовчуванням мають статус `NotConfigured`, нульовий бюджет і вимкнений автоматичний fallback;
+- відсутність OpenAI/xAI ключів не повинна ламати запуск системи, якщо ці провайдери вимкнені; явне ввімкнення без ключа повинно завершуватися типізованою startup/configuration validation failure;
+- тести не можуть виконувати неконтрольовані зовнішні платні запити; secrets, реальні токени й персональні Copilot credentials не потрапляють у Git, fixtures, logs або test output;
+- за фактичними Copilot-запусками система накопичує usage-метадані та показує орієнтовну ціну того самого навантаження через OpenAI й Grok;
+- live smoke tests OpenAI/xAI, перевірка реального provider-reported billing і оцінка якості конкретних платних моделей свідомо відкладаються до появи бюджету та фіксуються як verification gap, а не оголошуються успішно пройденими;
+- після появи бюджету достатньо окремого вузького smoke pass із жорстким spending cap; переробляти архітектуру або бізнес-логіку для цього не потрібно.
+
+Термін `budget` у цьому етапі означає локальний safety limit на витрати, а не гроші, які зберігає AiControlCenter. Фактичні кошти залишаються на стороні OpenAI/xAI; якщо провайдер не надає точного balance API, система показує usage/cost estimate та остаточно підтверджує доступність контрольованим provider request/error classification.
+
+Результат: AgentDefinition перетворюється з конфігурації на реально виконуваного AI-агента, який зараз працює через Copilot-підписку або детермінований тестовий провайдер, а OpenAI і Grok залишаються повністю підготовленими, але безпечними й вимкненими до явного фінансування.
 
 ### Етап 5.1. Адаптери n8n, OpenClaw і Hermes
 
@@ -767,7 +827,11 @@ Live-екран використовує тільки фактичні health/st
 ```text
 Назва: Генератор описів товарів
 Direction: AI Notes
-Модель: OpenAI
+AI routing: ordered ModelRoutes
+1. GitHub Copilot / Auto — автоматично
+2. GitHub Copilot / Grok — автоматично, якщо доступно акаунту
+3. OpenAI / вибрана модель — лише після дозволу користувача
+4. xAI / Grok — лише після дозволу користувача
 Системний промпт: Створи структурований опис товару...
 Статус: Active
 ```
@@ -776,14 +840,14 @@ Direction: AI Notes
 
 - назву й опис агента;
 - належність до Direction;
-- AI-провайдера та модель;
+- впорядкований список основної й резервних моделей `ModelRoute`;
 - системний промпт;
 - параметри виконання;
 - дозволені Tools та Integrations;
 - статус;
 - версію конфігурації.
 
-На цьому етапі агент уже існує як конфігурація, але ще не виконує реальні завдання через OpenAI.
+На цьому етапі агент уже існує як конфігурація, але ще не виконує реальні завдання через зовнішнього AI-провайдера.
 
 ### 11.2. Runs
 
@@ -900,24 +964,41 @@ Frontend не звертається напряму до RabbitMQ management API
 - bounded memory/CPU use під час тривалого відкриття сторінки;
 - Docker/E2E із поетапним вимкненням окремого backend-сервісу та його відновленням.
 
-### 11.4. Підключення OpenAI
+### 11.4. Підключення GitHub Copilot SDK, OpenAI та Grok
 
-Коли механізм виконання стабільно працює, можна підключати OpenAI Responses API.
+Коли механізм виконання стабільно працює, потрібно підключити GitHub Copilot SDK, OpenAI Responses API та xAI/Grok через спільний provider layer. GitHub Copilot використовується першим для особистого й навчального запуску без окремого API-поповнення, але система не повинна критично залежати від студентської підписки, її квоти або автоматично вибраної моделі.
 
 Потрібно реалізувати:
 
 - універсальний інтерфейс AI-провайдера;
+- адаптер GitHub Copilot SDK;
 - адаптер OpenAI;
+- адаптер xAI/Grok;
+- `DeterministicTestProvider` для відтворюваних тестів без зовнішньої мережі та оплати;
+- ordered `ModelRoute` collection на рівні AgentDefinition або policy: одна основна й довільна обмежена кількість резервних моделей, priority, `Auto`/explicit model, automatic/manual transition, allowed failure classes, max attempts і safety cap;
+- policy presets `GitHubOnly`, `OpenAIOnly`, `GrokOnly`, `GitHubThenOpenAI` та `GitHubThenGrok` як зручні шаблони, а не жорсткий доменний формат;
+- GitHub OAuth redirect/callback для явної авторизації користувача, перевірку Copilot entitlement і runtime-завантаження моделей, доступних саме його акаунту;
+- профіль `AI-провайдери` з GitHub OAuth connect/disconnect, write-only OpenAI/xAI key connect/replace/revoke, masked fingerprint, connection status, available models, last sync, usage, quota/credits, витратами й балансом зі статусом `ProviderReported`, `Estimated` або `Unavailable`;
+- зовнішнє поповнення OpenAI/xAI без внутрішнього гаманця або приймання платежів AiControlCenter;
 - передачу системного промпту й користувацьких даних;
-- налаштування моделі та параметрів;
+- provider-specific налаштування моделі та параметрів; для Copilot Student потрібно враховувати автоматичний вибір моделі;
 - обробку відповіді й помилок;
 - збереження результату в AgentRun;
-- підрахунок використаних токенів;
-- приблизний розрахунок вартості;
+- окремий запис кожної AI-спроби з provider, model, status, correlation/idempotency key і timestamps;
+- підрахунок request count, input/cached/output tokens, використаних GitHub AI Credits, тривалості, фактичної вартості й окремої приблизної вартості OpenAI та Grok;
+- ознаку `ProviderReported` або `Estimated` для кожного usage-показника;
+- fallback на платного провайдера лише для класифікованої quota/rate/temporary-availability помилки, якщо його явно дозволено політикою та ненульовим бюджетом;
+- заборону fallback після validation, permission, content-safety, cancellation, tool failure або невизначеного timeout, доки не доведено, що перша спроба не завершилася;
+- захист від паралельного чи повторного списання credits обох провайдерів за одне логічне виконання;
+- окремі денні й місячні бюджети OpenAI/xAI, максимальну вартість одного Run та аварійне вимкнення будь-якого платного fallback;
 - обмеження доступних агенту інструментів;
-- безпечне зберігання API-ключа.
+- безпечне зберігання OpenAI/xAI API keys і GitHub credentials без передачі на frontend;
+- health/readiness і зрозумілий статус `Available`, `QuotaExhausted`, `RateLimited`, `Unavailable` або `NotConfigured` для кожного провайдера;
+- checkpoint/resume та стани `PausedProviderUnavailable`/`PausedInsufficientFunds`, якщо всі дозволені маршрути вичерпано;
+- контрольоване продовження перерваного кроку іншою моделлю через новий `AiExecutionAttempt` із передачею контексту й partial output, без неправдивої обіцянки безшовного перенесення активного provider request;
+- unit, integration і contract tests для multi-route ordering, dynamic Copilot model catalog, quota/balance fallback, multiple резервних моделей, заборонених fallback-класів, budget exhaustion, mid-stream interruption, checkpoint/resume, cancellation, timeout ambiguity, idempotency та OpenAI/xAI wire contracts без реальних платних викликів.
 
-Після цього `AgentDefinition` перетворюється з конфігурації на реально виконуваного AI-агента.
+Після цього `AgentDefinition` перетворюється з конфігурації на реально виконуваного AI-агента. Поки конкретний користувач не поповнив OpenAI/xAI безпосередньо у цих сервісах, його локальна політика — `GitHubOnly`, рекомендована Copilot-модель — `Auto`, автоматичні тести — `DeterministicTestProvider`, а прямі OpenAI/Grok connections мають статус `NotConfigured` або `Unavailable`. Платний route вмикається лише після підключення ключа, зовнішнього фінансування, явного дозволу користувача та вузької ручної перевірки.
 
 ### 11.5. Autonomous Agent Loop
 
@@ -1347,7 +1428,7 @@ n8n можна використовувати для допоміжних гіл
 - `Approvals` — підтвердження критичних дій;
 - `Dashboard` — статистика агентів, запусків і помилок;
 - `AuditLog` — історія змін користувачів і системи;
-- облік токенів і приблизної вартості OpenAI;
+- облік GitHub AI Credits, токенів, фактичного провайдера, моделі та фактичної або приблизної вартості OpenAI/Grok;
 - сповіщення про невдалі виконання;
 - фільтри, пошук і перегляд технічних журналів.
 
@@ -1376,7 +1457,7 @@ n8n можна використовувати для допоміжних гіл
 → Orchestrator
 → RabbitMQ + MassTransit + Worker
 → Візуальний Operations Center і live observability
-→ OpenAI
+→ GitHub Copilot SDK + OpenAI/Grok provider routing, безкоштовний test provider і контрольований fallback
 → Agent Runtime Adapters: n8n + OpenClaw + Hermes
 → Autonomous Agent Loop: Planner + Tools + Policy + Evaluator + Budgets
 → Workflows
@@ -1433,6 +1514,9 @@ n8n можна використовувати для допоміжних гіл
 - додані health checks для нових зовнішніх залежностей;
 - Docker-конфігурація й `.env.example` оновлені;
 - секрети, токени та приватні файли не потрапили в Git;
+- автоматичні тести й стандартний Docker E2E не потребують платних AI API keys і не можуть непомітно виконувати billable network calls;
+- профіль AI-провайдерів не показує секрети, не приписує estimated balance провайдеру як точне значення й не дозволяє одному користувачу витрачати credentials іншого;
+- multi-model fallback не виконує несанкціонований платний виклик, не створює цикли, не повторює невизначену спробу сліпо та зберігає checkpoint перед pause/resume;
 - `README` містить актуальні команди запуску;
 - Codex показав список змінених файлів і фактично виконані перевірки;
 - незавершені або свідомо відкладені рішення записані як конкретні наступні задачі.
@@ -1441,13 +1525,15 @@ n8n можна використовувати для допоміжних гіл
 
 До production-реалізації потрібно окремо підтвердити:
 
-1. `Hermes Agent` — спосіб запуску, пам'ять, subagents, статус, callback або polling, cancel, timeout та ізоляцію.
-2. `OpenClaw` — канали команд, skills, routing, статуси, permissions і спосіб безпечного виклику AiControlCenter.
-3. `n8n` — webhook authentication, execution ID, callbacks, retries та versioning workflow.
-4. `2D Transformation Engine` — ліцензію, якість, швидкість, GPU/CPU-вимоги, формат API/CLI, preview і повторний рендер.
-5. `YouTube` — OAuth, upload flow, квоти, обов'язкові метадані, статуси й поведінку тестового застосунку.
-6. `TikTok` — доступ до Content Posting API, OAuth scopes, вимоги до аудиту застосунку, формати та статус публікації.
-7. `Object Storage` — швидкість завантаження великих файлів, multipart upload, строк життя тимчасових посилань, очищення й резервування.
+1. `GitHub Copilot SDK` — фактичну доступність через поточний Student/підписний акаунт, authentication flow, повернені usage-метадані, quota behavior і придатність для реальних запусків.
+2. `OpenAI/xAI` — wire compatibility і помилки перевіряються безкоштовними contract tests; live billing, provider-reported usage та якість відкладаються до появи бюджету й виконуються з жорстким spending cap.
+3. `Hermes Agent` — спосіб запуску, пам'ять, subagents, статус, callback або polling, cancel, timeout та ізоляцію.
+4. `OpenClaw` — канали команд, skills, routing, статуси, permissions і спосіб безпечного виклику AiControlCenter.
+5. `n8n` — webhook authentication, execution ID, callbacks, retries та versioning workflow.
+6. `2D Transformation Engine` — ліцензію, якість, швидкість, GPU/CPU-вимоги, формат API/CLI, preview і повторний рендер.
+7. `YouTube` — OAuth, upload flow, квоти, обов'язкові метадані, статуси й поведінку тестового застосунку.
+8. `TikTok` — доступ до Content Posting API, OAuth scopes, вимоги до аудиту застосунку, формати та статус публікації.
+9. `Object Storage` — швидкість завантаження великих файлів, multipart upload, строк життя тимчасових посилань, очищення й резервування.
 
 POC не повинен одразу змішуватися з основним доменним кодом. Спочатку створюється мінімальний ізольований тест, фіксуються результати й тільки після цього реалізується production-адаптер.
 

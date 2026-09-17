@@ -1,6 +1,6 @@
 # ControlPlane
 
-ControlPlane має ізольований HTTP/gRPC host і власну PostgreSQL-схему. Він володіє каталогом `Direction`: створенням, читанням, редагуванням, статусом, порядком сортування та архівуванням без hard delete. Технічний `ServiceInfo` gRPC залишається окремим від бізнес-API.
+ControlPlane має ізольований HTTP/gRPC host і власну PostgreSQL-схему. Він володіє каталогами `Direction` та прив’язаних `AgentDefinition`, їх CRUD/status/archive lifecycle без hard delete. Через `AgentCatalog.GetRunnableAgent` Orchestrator отримує snapshot лише активного, неархівованого агента в активному напрямку.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
     Infrastructure --> Db["PostgreSQL control_plane"]
 ```
 
-Читати Directions можуть `Admin`, `Developer` і `User` після зміни тимчасового пароля. Усі mutation endpoints доступні лише `Admin`. Зовнішній шлях проходить через Gateway: `/api/control-plane/v1/directions`.
+Читати каталоги можуть `Admin`, `Developer` і `User` після зміни тимчасового пароля. Directions змінює лише `Admin`; AgentDefinitions — `Admin` або `Developer`. Зовнішні шляхи проходять через Gateway: `/api/control-plane/v1/directions` і `/api/control-plane/v1/agents`.
 
 - [Api](AiControlCenter.ControlPlane.Api/README.md)
 - [Application](AiControlCenter.ControlPlane.Application/README.md)
@@ -23,3 +23,5 @@ flowchart LR
 [Межі сервісів](../../../docs/architecture/service-boundaries.md)
 
 [Модель і API Directions](../../../docs/architecture/directions.md)
+
+[Agents, Runs і Worker](../../../docs/architecture/agents-runs-worker.md)

@@ -8,15 +8,30 @@ interface TechnicalPong {
   timestamp: string;
 }
 
+export interface RunStatusChangedEvent {
+  eventId: string;
+  runId: string;
+  ownerUserId: string;
+  status: string;
+  revision: number;
+  occurredAt: string;
+  stepSequence: number | null;
+  stepStatus: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RealtimeService {
   private readonly config = inject(APP_ENVIRONMENT);
   private readonly accessTokens = inject(AccessTokenStore);
   private readonly connectionState = signal<HubConnectionState>(HubConnectionState.Disconnected);
+  private readonly latestRunEventValue = signal<RunStatusChangedEvent | null>(null);
+  private readonly reconnectGenerationValue = signal(0);
   private connection?: HubConnection;
 
   readonly state = this.connectionState.asReadonly();
   readonly isConnected = computed(() => this.connectionState() === HubConnectionState.Connected);
+  readonly latestRunEvent = this.latestRunEventValue.asReadonly();
+  readonly reconnectGeneration = this.reconnectGenerationValue.asReadonly();
 
   async connect(): Promise<TechnicalPong | null> {
     if (!this.accessTokens.token()) {
@@ -34,8 +49,15 @@ export class RealtimeService {
       .withAutomaticReconnect()
       .build();
 
+    this.connection.on('RunStatusChanged', (event: RunStatusChangedEvent) => {
+      this.latestRunEventValue.set(event);
+    });
+
     this.connection.onreconnecting(() => this.connectionState.set(HubConnectionState.Reconnecting));
-    this.connection.onreconnected(() => this.connectionState.set(HubConnectionState.Connected));
+    this.connection.onreconnected(() => {
+      this.connectionState.set(HubConnectionState.Connected);
+      this.reconnectGenerationValue.update((generation) => generation + 1);
+    });
     this.connection.onclose(() => this.connectionState.set(HubConnectionState.Disconnected));
 
     try {

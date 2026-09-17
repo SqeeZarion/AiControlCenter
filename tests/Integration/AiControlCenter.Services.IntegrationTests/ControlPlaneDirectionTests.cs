@@ -627,7 +627,9 @@ public sealed class ControlPlaneDirectionTests : IAsyncLifetime
     {
         await using var connection = new NpgsqlConnection(postgres.GetConnectionString());
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("TRUNCATE TABLE control_plane.directions", connection);
+        await using var command = new NpgsqlCommand(
+            "TRUNCATE TABLE control_plane.agent_definitions, control_plane.directions",
+            connection);
         await command.ExecuteNonQueryAsync();
     }
 

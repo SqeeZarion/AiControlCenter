@@ -1,6 +1,7 @@
 using System.Net;
 using AiControlCenter.Gateway;
 using AiControlCenter.Gateway.Hubs;
+using AiControlCenter.Gateway.Messaging;
 using AiControlCenter.Observability;
 using AiControlCenter.Security;
 using FluentValidation;
@@ -26,6 +27,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 builder.Services.AddValidatorsFromAssemblyContaining<GatewayMarker>();
 builder.Services.AddSignalR();
+builder.Services.AddGatewayMessaging(builder.Configuration);
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 builder.Services.AddHealthChecks()

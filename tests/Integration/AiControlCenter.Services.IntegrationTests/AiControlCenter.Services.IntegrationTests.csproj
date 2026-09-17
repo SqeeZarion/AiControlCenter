@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\..\src\Services\ControlPlane\AiControlCenter.ControlPlane.Infrastructure\AiControlCenter.ControlPlane.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Services\Orchestrator\AiControlCenter.Orchestrator.Api\AiControlCenter.Orchestrator.Api.csproj" />
     <ProjectReference Include="..\..\..\src\Services\Orchestrator\AiControlCenter.Orchestrator.Infrastructure\AiControlCenter.Orchestrator.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\Worker\AiControlCenter.Worker.Service\AiControlCenter.Worker.Service.csproj" />
     <ProjectReference Include="..\..\..\src\Services\Integrations\AiControlCenter.Integrations.Api\AiControlCenter.Integrations.Api.csproj" />
     <ProjectReference Include="..\..\..\src\Services\Integrations\AiControlCenter.Integrations.Infrastructure\AiControlCenter.Integrations.Infrastructure.csproj" />
   </ItemGroup>

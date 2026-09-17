@@ -1,3 +1,4 @@
+using AiControlCenter.Orchestrator.Infrastructure.Persistence;
 using MassTransit;
 
 namespace AiControlCenter.Orchestrator.Api.Messaging;
@@ -18,6 +19,13 @@ public static class RabbitMqExtensions
         services.AddMassTransit(configurator =>
         {
             configurator.SetKebabCaseEndpointNameFormatter();
+            configurator.AddEntityFrameworkOutbox<OrchestratorDbContext>(outbox =>
+            {
+                outbox.UsePostgres();
+                outbox.UseBusOutbox();
+                outbox.QueryDelay = TimeSpan.FromMilliseconds(250);
+            });
+            configurator.AddConsumer<AgentRunExecutionFaultConsumer>();
             configurator.UsingRabbitMq((context, rabbit) =>
             {
                 //DNS-ім’я контейнера RabbitMQ;
@@ -37,7 +45,11 @@ public static class RabbitMqExtensions
                     TimeSpan.FromMilliseconds(200),
                     TimeSpan.FromSeconds(1),
                     TimeSpan.FromSeconds(5)));
-                rabbit.ConfigureEndpoints(context);
+                rabbit.ReceiveEndpoint("aicontrolcenter-orchestrator-run-faults-v1", endpoint =>
+                {
+                    endpoint.UseEntityFrameworkOutbox<OrchestratorDbContext>(context);
+                    endpoint.ConfigureConsumer<AgentRunExecutionFaultConsumer>(context);
+                });
             });
         });
 

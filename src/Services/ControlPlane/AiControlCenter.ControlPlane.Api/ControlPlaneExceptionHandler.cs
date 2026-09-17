@@ -18,8 +18,13 @@ public sealed partial class ControlPlaneExceptionHandler(ILogger<ControlPlaneExc
         var (status, title) = exception switch
         {
             DirectionNotFoundException => (StatusCodes.Status404NotFound, "Direction not found."),
+            AgentDefinitionNotFoundException or AgentDirectionNotFoundException =>
+                (StatusCodes.Status404NotFound, "Agent definition or direction not found."),
             DirectionConflictException or DirectionRuleViolationException =>
                 (StatusCodes.Status409Conflict, exception.Message),
+            AgentDefinitionConflictException or AgentDefinitionRuleViolationException =>
+                (StatusCodes.Status409Conflict, exception.Message),
+            AgentNotRunnableException => (StatusCodes.Status409Conflict, exception.Message),
             ValidationException or ArgumentException or BadHttpRequestException or JsonException =>
                 (StatusCodes.Status400BadRequest, "Validation failed."),
             _ => (0, string.Empty),

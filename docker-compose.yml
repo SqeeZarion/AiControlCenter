@@ -41,6 +41,11 @@ services:
       <<: *dotnet-environment
       ASPNETCORE_URLS: http://+:8080
       Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      RabbitMq__Enabled: "true"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
     volumes:
       - type: bind
         source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
@@ -54,6 +59,8 @@ services:
       orchestrator-api:
         condition: service_healthy
       integrations-api:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     ports:
       - "5080:8080"
@@ -172,6 +179,27 @@ services:
       <<: *http-healthcheck
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
 
+  orchestrator-migrations:
+    <<: *dotnet-service
+    restart: "no"
+    build:
+      context: .
+      dockerfile: src/Services/Orchestrator/AiControlCenter.Orchestrator.Api/Dockerfile
+    command: ["--migrate"]
+    environment:
+      <<: *dotnet-environment
+      ConnectionStrings__OrchestratorDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${ORCHESTRATOR_DB_USER};Password=${ORCHESTRATOR_DB_PASSWORD};Search Path=orchestrator"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      WorkerGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   orchestrator-api:
     <<: *dotnet-service
     build:
@@ -187,14 +215,15 @@ services:
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASSWORD}
       Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      WorkerGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
     volumes:
       - type: bind
         source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
         target: /run/aicontrolcenter-keys/identity-public.pem
         read_only: true
     depends_on:
-      postgres:
-        condition: service_healthy
+      orchestrator-migrations:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
       controlplane-api:
@@ -217,8 +246,12 @@ services:
       RabbitMq__Port: 5672
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASSWORD}
+      OrchestratorGrpc__Address: http://orchestrator-api:8081
+      OrchestratorGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      orchestrator-api:
         condition: service_healthy
     ports:
       - "5106:8080"

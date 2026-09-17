@@ -1,10 +1,11 @@
 # Worker
 
-Каталог містить фоновий executable Worker.
+Каталог містить stateless executable Worker для безпечного детермінованого Test workflow.
 
 ```mermaid
 flowchart LR
-    Worker["AiControlCenter.Worker.Service"] -.-> RabbitMQ
+    RabbitMQ --> Worker["AiControlCenter.Worker.Service"]
+    Worker -->|"RunProgress gRPC"| Orchestrator
     Worker --> Health["Health endpoints"]
 ```
 

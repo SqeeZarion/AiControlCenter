@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+option csharp_namespace = "AiControlCenter.Grpc.Contracts.V1";
+
+package aicontrolcenter.execution.v1;
+
+service AgentCatalog {
+  rpc GetRunnableAgent (GetRunnableAgentRequest) returns (RunnableAgentReply);
+}
+
+//Дай мені конфігурацію цього агента, якщо його можна запускати
+message GetRunnableAgentRequest {
+  string agent_id = 1;
+}
+
+//Знімок агента на момент запуску.
+message RunnableAgentReply {
+  string agent_id = 1;
+  string agent_name = 2;
+  string agent_code = 3;
+  string agent_description = 4;
+  int64 agent_version = 5;
+  string execution_type = 6;
+  string direction_id = 7;
+  string direction_name = 8;
+  string direction_code = 9;
+  int64 direction_version = 10;
+}
+
+//Цей gRPC-сервіс працює в Orchestrator.
+service RunProgress {
+  //Я отримав завдання і починаю виконувати цей Run
+  rpc BeginRun (BeginRunRequest) returns (RunProgressReply);
+  //Worker повідомляє стан конкретного кроку.
+  rpc ReportStep (ReportStepRequest) returns (RunProgressReply);
+  //Виконання повністю завершено
+  rpc CompleteRun (CompleteRunRequest) returns (RunProgressReply);
+}
+
+message BeginRunRequest {
+  string run_id = 1;
+  string message_id = 2;
+}
+
+message ReportStepRequest {
+  string run_id = 1;
+  string message_id = 2;
+  int32 sequence = 3;
+  string name = 4;
+  RunStepProgressStatus status = 5;
+  string log = 6;
+}
+
+message CompleteRunRequest {
+  string run_id = 1;
+  string message_id = 2;
+  RunCompletionStatus status = 3;
+  string result = 4;
+  string error = 5;
+}
+
+//Кожен метод повертає:
+message RunProgressReply {
+  bool accepted = 1;
+  bool already_applied = 2;
+  int64 revision = 3;
+  string status = 4;
+}
+
+//Статуси кроку
+enum RunStepProgressStatus {
+  //значення не задане, його потрібно відхиляти
+  RUN_STEP_PROGRESS_STATUS_UNSPECIFIED = 0;
+  //крок виконується
+  RUN_STEP_PROGRESS_STATUS_RUNNING = 1;
+  //крок успішно завершено
+  RUN_STEP_PROGRESS_STATUS_SUCCEEDED = 2;
+  //крок завершився помилкою.
+  RUN_STEP_PROGRESS_STATUS_FAILED = 3;
+}
+
+//Статуси завершення Run
+enum RunCompletionStatus {
+  //некоректне або відсутнє значення
+  RUN_COMPLETION_STATUS_UNSPECIFIED = 0;
+  //запуск успішний
+  RUN_COMPLETION_STATUS_SUCCEEDED = 1;
+  //запуск невдалий
+  RUN_COMPLETION_STATUS_FAILED = 2;
+}

@@ -1,6 +1,6 @@
 # AiControlCenter.ControlPlane.Infrastructure
 
-Infrastructure реєструє `ControlPlaneDbContext`, `DirectionRepository`, unit of work та migration каталогу Directions у PostgreSQL.
+Infrastructure реєструє `ControlPlaneDbContext`, repositories `Direction`/`AgentDefinition`, unit of work та migrations обох каталогів у PostgreSQL.
 
 ```mermaid
 flowchart LR
@@ -10,7 +10,7 @@ flowchart LR
     Infra --> Db["schema control_plane"]
 ```
 
-`directions` зберігається у схемі `control_plane`. Унікальний index захищає normalized `code`; check constraints захищають status, name/code boundaries, sort order і timestamps. Складений index `(archived_at, status, sort_order, name, id)` підтримує типові list-запити, коли фільтрація починається з archive/status; інші комбінації фільтрів PostgreSQL може виконувати іншим plan. PostgreSQL system column `xmin` використовується як optimistic concurrency token. Архівування встановлює `archived_at`, не видаляючи рядок.
+`directions` і `agent_definitions` зберігаються у схемі `control_plane`. Unique/check/FK constraints захищають normalized codes, boundaries, status, execution type й timestamps. PostgreSQL system column `xmin` використовується як optimistic concurrency token. FK має `Restrict`, а архівування встановлює `archived_at` без видалення рядка.
 
 `AddControlPlaneInfrastructure` читає connection string, використовує Npgsql і окрему migration history table у схемі `control_plane`. Readiness host перевіряє доступність цього context. `ControlPlaneDbContextFactory` підтримує design-time EF commands через `ConnectionStrings__ControlPlaneDatabase`.
 

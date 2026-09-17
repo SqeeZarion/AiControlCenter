@@ -1,6 +1,6 @@
 # AiControlCenter.Orchestrator.Application
 
-Зарезервований application layer Orchestrator. Проєкт посилається на Domain, але use cases, ports, validators і handlers ще відсутні.
+Application layer координує створення, читання та state transitions `AgentRun`. Ports ізолюють PostgreSQL repository/unit of work, ControlPlane AgentCatalog і MassTransit transport; FluentValidation захищає command/query boundaries.
 
 ```mermaid
 flowchart LR
@@ -8,8 +8,8 @@ flowchart LR
     App --> Domain["Orchestrator.Domain"]
 ```
 
-Технічний gRPC `ServiceInfo` та RabbitMQ connection належать composition/transport коду API і не утворюють application use case. Нові use cases мають працювати через власні доменні типи й interfaces.
+Create use case отримує immutable runnable snapshot, створює `Queued` Run і передає command/status у transactional outbox. Progress use cases виконуються в транзакції з production row lock та публікують status лише після застосованого переходу.
 
-`ProjectReference`: `Orchestrator.Domain`. NuGet-залежності відсутні.
+`ProjectReference`: `Orchestrator.Domain`. FluentValidation перевіряє bounded input, IDs, enum values і pagination.
 
 [Orchestrator](../README.md) · [Domain](../AiControlCenter.Orchestrator.Domain/README.md) · [Правила залежностей](../../../../docs/architecture/dependency-rules.md)
