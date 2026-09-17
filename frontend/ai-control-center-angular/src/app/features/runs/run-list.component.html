@@ -1,0 +1,72 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">Orchestrator</p>
+    <h2>Запуски</h2>
+    <p>Історія тестових виконань та їхній поточний стан.</p>
+  </div>
+  <a class="primary" routerLink="/agents">Запустити агента</a>
+</section>
+<section class="filters" aria-label="Фільтри запусків">
+  <label
+    >Статус
+    <select [ngModel]="status()" (ngModelChange)="status.set($event); applyFilters()">
+      <option value="">Усі</option>
+      <option value="Queued">У черзі</option>
+      <option value="Running">Виконуються</option>
+      <option value="Succeeded">Успішні</option>
+      <option value="Failed">З помилкою</option>
+    </select></label
+  ><label
+    >ID агента
+    <input [ngModel]="agentId()" (ngModelChange)="agentId.set($event)" maxlength="36" /></label
+  ><button type="button" (click)="applyFilters()">Застосувати</button>
+</section>
+@if (error()) {
+  <p class="notice error" role="alert">{{ error() }}</p>
+}
+@if (loading()) {
+  <p class="state">Завантаження запусків…</p>
+} @else if (items().length === 0) {
+  <p class="state">Запусків за вибраними фільтрами немає.</p>
+} @else {
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Агент</th>
+          <th>Напрямок</th>
+          <th>Статус</th>
+          <th>Створено</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (run of items(); track run.id) {
+          <tr>
+            <td>
+              <strong>{{ run.agentName }}</strong
+              ><br /><code>{{ run.agentCode }}</code>
+            </td>
+            <td>{{ run.directionName }}</td>
+            <td>
+              <span class="badge" [class.active]="run.status === 'Succeeded'">{{
+                statusLabel(run.status)
+              }}</span>
+            </td>
+            <td>{{ formatDate(run.createdAt) }}</td>
+            <td><a routerLink="/runs/{{ run.id }}">Деталі</a></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  @if (totalPages() > 1) {
+    <nav class="pagination">
+      <button type="button" [disabled]="page() === 1" (click)="changePage(page() - 1)">Назад</button
+      ><span>Сторінка {{ page() }} з {{ totalPages() }} · усього {{ totalCount() }}</span
+      ><button type="button" [disabled]="page() === totalPages()" (click)="changePage(page() + 1)">
+        Далі
+      </button>
+    </nav>
+  }
+}

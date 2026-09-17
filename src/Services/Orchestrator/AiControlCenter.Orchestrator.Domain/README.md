@@ -1,6 +1,6 @@
 # AiControlCenter.Orchestrator.Domain
 
-Чистий доменний шар Orchestrator. У поточній реалізації він не містить entities, value objects або business rules.
+Чистий доменний шар містить `AgentRun`, `RunStep`, immutable `AgentSnapshot` і правила `Queued → Running → Succeeded/Failed` та `Queued → Failed`.
 
 ```mermaid
 flowchart BT
@@ -8,7 +8,7 @@ flowchart BT
     Infrastructure["Orchestrator.Infrastructure"] --> Domain
 ```
 
-Проєкт не повинен залежати від transport, persistence, ASP.NET Core, EF Core чи MassTransit. RabbitMQ contracts також не належать домену.
+Aggregate перевіряє message ownership, idempotent repeats, порядок кроків, terminal states, bounded text і монотонні UTC timestamps. Проєкт не залежить від transport, persistence, ASP.NET Core, EF Core чи MassTransit.
 
 `ProjectReference` і NuGet-залежності відсутні.
 

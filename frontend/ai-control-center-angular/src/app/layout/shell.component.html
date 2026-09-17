@@ -13,6 +13,8 @@
 
   <nav aria-label="Основна навігація">
     <a routerLink="/directions" routerLinkActive="active">Напрямки</a>
+    <a routerLink="/agents" routerLinkActive="active">Агенти</a>
+    <a routerLink="/runs" routerLinkActive="active">Запуски</a>
     <span>{{
       gateway()?.service ?? (checked() ? 'Gateway unavailable' : 'Checking gateway…')
     }}</span>

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\service_info.proto" GrpcServices="Both" />
+    <Protobuf Include="Protos\agent_execution.proto" GrpcServices="Both" />
   </ItemGroup>
 
   <PropertyGroup>

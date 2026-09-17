@@ -1,6 +1,6 @@
 # AiControlCenter.Grpc.Contracts
 
-Class library генерує клієнтські та серверні C#-типи з `Protos/service_info.proto`. Контракт призначений лише для технічного запиту інформації про сервіс.
+Class library генерує клієнтські та серверні C#-типи з versioned protobuf. Окрім technical `ServiceInfo`, він містить `AgentCatalog` snapshot і `RunProgress` для Worker.
 
 ## Основний процес
 
@@ -17,6 +17,8 @@ sequenceDiagram
 ```
 
 ## Залежності
+
+`AgentCatalog.GetRunnableAgent` повертає bounded immutable snapshot. `RunProgress.BeginRun`, `ReportStep` і `CompleteRun` не дають Worker доступу до Orchestrator DB; server перевіряє API key, порядок і state transitions.
 
 - `Google.Protobuf`, `Grpc.Core.Api`.
 - `Grpc.Tools` використовується лише під час build.

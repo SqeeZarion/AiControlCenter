@@ -19,6 +19,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql =>
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "control_plane")));
         services.AddScoped<IDirectionRepository, DirectionRepository>();
+        services.AddScoped<IAgentDefinitionRepository, AgentDefinitionRepository>();
         services.AddScoped<IControlPlaneUnitOfWork, ControlPlaneUnitOfWork>();
 
         return services;

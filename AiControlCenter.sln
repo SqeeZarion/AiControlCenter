@@ -83,6 +83,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiControlCenter.Identity.Un
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiControlCenter.ControlPlane.UnitTests", "tests\Unit\AiControlCenter.ControlPlane.UnitTests\AiControlCenter.ControlPlane.UnitTests.csproj", "{F4A26E3A-2B80-4E9F-9C68-8E1D56E4A703}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiControlCenter.Orchestrator.UnitTests", "tests\Unit\AiControlCenter.Orchestrator.UnitTests\AiControlCenter.Orchestrator.UnitTests.csproj", "{BC6D8090-DCC9-448A-A783-340A21B7FD4B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -417,6 +419,18 @@ Global
 		{F4A26E3A-2B80-4E9F-9C68-8E1D56E4A703}.Release|x64.Build.0 = Release|Any CPU
 		{F4A26E3A-2B80-4E9F-9C68-8E1D56E4A703}.Release|x86.ActiveCfg = Release|Any CPU
 		{F4A26E3A-2B80-4E9F-9C68-8E1D56E4A703}.Release|x86.Build.0 = Release|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Debug|x64.Build.0 = Debug|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Debug|x86.Build.0 = Debug|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Release|x64.ActiveCfg = Release|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Release|x64.Build.0 = Release|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Release|x86.ActiveCfg = Release|Any CPU
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -460,5 +474,6 @@ Global
 		{BEB66C01-492C-41EC-A3CD-9593C6824C3D} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
 		{C24D4E5A-9172-4B44-9AE7-47A9381D3F10} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
 		{F4A26E3A-2B80-4E9F-9C68-8E1D56E4A703} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
+		{BC6D8090-DCC9-448A-A783-340A21B7FD4B} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
 	EndGlobalSection
 EndGlobal

@@ -98,7 +98,8 @@ public sealed class ServiceHostHealthTests
                 .UseSetting("RabbitMq:Host", "127.0.0.1")
                 .UseSetting("RabbitMq:Port", "1")
                 .UseSetting("RabbitMq:Username", "unavailable")
-                .UseSetting("RabbitMq:Password", "unavailable"));
+                .UseSetting("RabbitMq:Password", "unavailable")
+                .UseSetting("WorkerGrpc:ApiKey", "health-test-worker-key-at-least-32-characters"));
         using var client = factory.CreateClient();
         var registrations = factory.Services
             .GetRequiredService<IOptions<HealthCheckServiceOptions>>()

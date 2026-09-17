@@ -1,0 +1,252 @@
+:host {
+  display: block;
+}
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+h2,
+h3,
+p {
+  margin: 0;
+}
+h2 {
+  margin-top: 0.35rem;
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+}
+.page-heading p:not(.eyebrow),
+article > p,
+.timeline p {
+  color: #a9b4c8;
+  line-height: 1.55;
+}
+.eyebrow {
+  color: #7dd3fc;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+a {
+  color: #7dd3fc;
+  text-decoration: none;
+}
+button,
+.primary {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #334155;
+  border-radius: 0.65rem;
+  color: #e2e8f0;
+  background: #111827;
+  cursor: pointer;
+}
+.primary {
+  border-color: #7dd3fc;
+  color: #07111f;
+  background: #7dd3fc;
+  font-weight: 700;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.filters,
+.launch-panel {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid #293449;
+  border-radius: 1rem;
+  background: #0d1525;
+}
+label {
+  display: grid;
+  gap: 0.4rem;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+.checkbox {
+  display: flex;
+  align-items: center;
+  min-height: 2.7rem;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #334155;
+  border-radius: 0.6rem;
+  color: #edf4ff;
+  background: #08101e;
+}
+.notice,
+.state {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 0.75rem;
+}
+.notice.error {
+  color: #fecaca;
+  background: #451a1a;
+}
+.notice.success {
+  color: #bbf7d0;
+  background: #14532d;
+}
+.state {
+  color: #a9b4c8;
+  background: #0d1525;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+article {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #202b40;
+  border-radius: 1rem;
+  background: #0d1525;
+}
+article.archived {
+  opacity: 0.72;
+}
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+code {
+  color: #8b9ab2;
+  word-break: break-all;
+}
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  color: #fdba74;
+  background: #431407;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.badge.active {
+  color: #86efac;
+  background: #052e16;
+}
+dl {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+dt {
+  color: #71809b;
+}
+dd {
+  margin: 0;
+  text-align: right;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.danger {
+  color: #fecaca;
+  border-color: #7f1d1d;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  color: #a9b4c8;
+}
+.form-page {
+  width: min(850px, 100%);
+}
+.form-page form {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  border: 1px solid #293449;
+  border-radius: 1rem;
+  background: #0d1525;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+small {
+  color: #a9b4c8;
+}
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+  border: 1px solid #293449;
+  border-radius: 1rem;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #0d1525;
+}
+th,
+td {
+  padding: 1rem;
+  border-bottom: 1px solid #202b40;
+  text-align: left;
+}
+.section-title {
+  margin: 1.5rem 0 1rem;
+}
+.timeline {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.timeline li {
+  padding: 1rem;
+  border-left: 3px solid #38bdf8;
+  background: #0d1525;
+}
+.timeline li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.timeline p {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+}
+@media (max-width: 640px) {
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .filters,
+  .launch-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

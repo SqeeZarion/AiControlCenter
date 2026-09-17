@@ -29,6 +29,7 @@ internal static class TestJwtTokenFactory
 
     public static string Issue(
         string role = "Admin",
+        Guid? userId = null,
         bool passwordChangeRequired = false,
         string keyId = "identity-dev-2026-01",
         string issuer = "AiControlCenter.Identity",
@@ -39,7 +40,7 @@ internal static class TestJwtTokenFactory
         var now = DateTimeOffset.UtcNow;
         var claims = new List<Claim>
         {
-            new("sub", Guid.NewGuid().ToString()),
+            new("sub", (userId ?? Guid.NewGuid()).ToString()),
             new("jti", Guid.NewGuid().ToString()),
             new("pwd_change_required", passwordChangeRequired ? "true" : "false"),
             new("role", role),

@@ -4,8 +4,8 @@
 flowchart TB
     Gateway["Gateway: routing і edge security"]
     Identity["Identity: users і sessions"]
-    ControlPlane["ControlPlane: isolated owner"]
-    Orchestrator["Orchestrator: isolated owner"]
+    ControlPlane["ControlPlane: Directions і AgentDefinitions"]
+    Orchestrator["Orchestrator: AgentRuns і transitions"]
     Integrations["Integrations: isolated owner"]
     Worker["Worker: stateless host"]
     Gateway --> Identity
@@ -24,15 +24,15 @@ flowchart TB
 
 ## ControlPlane
 
-Володіє схемою `control_plane`, aggregate `Direction` і REST use cases каталогу напрямків. Також надає versioned technical `ServiceInfo` gRPC service. REST і gRPC захищені delegated user authentication; дані Directions не читаються напряму іншими сервісами.
+Володіє схемою `control_plane`, aggregates `Direction` і `AgentDefinition`, REST-каталогом та versioned gRPC snapshot для запуску активного Test agent. REST і gRPC захищені delegated user authentication; інші сервіси не читають цю схему напряму.
 
 ## Orchestrator
 
-Володіє схемою `orchestrator`, має direct gRPC client ControlPlane і MassTransit bus connection. Бізнес-оркестрація, state machines та production messages не реалізовані.
+Володіє схемою `orchestrator`, `AgentRun`/`RunStep`, переходами стану й transactional outbox. Отримує Agent snapshot через ControlPlane gRPC, публікує commands/status events і приймає Worker progress через окремо authenticated gRPC.
 
 ## Worker
 
-Stateless `BackgroundService` host з MassTransit, observability, liveness/readiness. Database і business consumers відсутні.
+Stateless host з MassTransit consumer для bounded deterministic Test workflow, observability та health. База даних, private signing key, shell і довільне виконання відсутні.
 
 ## Integrations
 

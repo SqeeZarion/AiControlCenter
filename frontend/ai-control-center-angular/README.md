@@ -1,6 +1,6 @@
 # AiControlCenter Angular
 
-Односторінковий Angular-клієнт працює за тим самим origin, що й Nginx/Gateway. Він реалізує вхід, відновлення сесії, зміну тимчасового пароля, захист маршрутів, технічне SignalR-підключення та панель Directions.
+Односторінковий Angular-клієнт працює за тим самим origin, що й Nginx/Gateway. Він реалізує вхід, відновлення сесії, зміну тимчасового пароля, захист маршрутів, панелі напрямків і тестових агентів, запуск виконання та live-перегляд статусу через SignalR.
 
 ## Потік сесії
 
@@ -25,9 +25,11 @@ sequenceDiagram
 - `AccessTokenStore` тримає access token лише в оперативній пам’яті; `localStorage` і `sessionStorage` не використовуються.
 - `authInterceptor` додає Bearer token лише до захищених same-origin API. Він координує один refresh, а staggered `401` для старого token повторює з уже актуальним token без другого refresh; `403` та auth endpoints refresh не запускають.
 - `authGuard`, `passwordChangedGuard` і `roleGuard` контролюють маршрути клієнта; серверні policies залишаються остаточним захистом.
-- `RealtimeService` підключається до `/hubs/system`, передає актуальний access token і викликає технічний `Ping`.
+- `RealtimeService` підключається до `/hubs/system`, передає актуальний access token, викликає технічний `Ping` і приймає обмежені `RunStatusChanged` events. Після reconnect сторінка Run перечитує REST-джерело істини.
 - `LoginComponent`, `ChangePasswordComponent`, `ShellComponent` та `ForbiddenComponent` формують наявний UI.
 - `DirectionListComponent` показує loading/empty/error states, pagination, фільтри та дозволені дії; `DirectionFormComponent` надає reactive create/edit form з одним atomic update request. `DirectionApiService` звертається лише до same-origin Gateway route.
+- `AgentListComponent` і `AgentFormComponent` підтримують пошук, фільтри, pagination, керування визначеннями та запуск активного Test agent відповідно до ролі.
+- `RunListComponent` читає список через REST. `RunDetailComponent` виконує SignalR-triggered REST reconciliation, застосовує лише новіші revisions і відновлює кроки та журнал після reload/reconnect.
 
 ## Маршрути
 
@@ -40,6 +42,11 @@ sequenceDiagram
 | `/directions`          | список, усі platform roles після зміни пароля          |
 | `/directions/new`      | створення, додатково `roleGuard(Admin)`                |
 | `/directions/:id/edit` | редагування, додатково `roleGuard(Admin)`              |
+| `/agents`              | список і запуск Test agent, усі platform roles         |
+| `/agents/new`          | створення, `roleGuard(Admin, Developer)`               |
+| `/agents/:id/edit`     | редагування, `roleGuard(Admin, Developer)`             |
+| `/runs`                | власні Runs; Admin бачить усі                          |
+| `/runs/:id`            | деталі, кроки, журнал і live status                    |
 
 ## Запуск і перевірка
 
@@ -52,7 +59,7 @@ npm.cmd test --prefix .\frontend\ai-control-center-angular -- --watch=false
 npm.cmd run build --prefix .\frontend\ai-control-center-angular -- --configuration production
 ```
 
-Тести перевіряють ініціалізацію/refresh сесії, memory-only token, захисні guards, поведінку interceptor без циклу повторних refresh, API mapping і UI states/actions Directions.
+Тести перевіряють ініціалізацію/refresh сесії, memory-only token, захисні guards, поведінку interceptor без циклу повторних refresh, API mapping Directions/Agents/Runs і відхилення stale або duplicate Run events.
 
 ## Пов’язана документація
 
@@ -61,3 +68,4 @@ npm.cmd run build --prefix .\frontend\ai-control-center-angular -- --configurati
 - [Спільна JWT-безпека](../../docs/security/security-overview.md)
 - [Gateway](../../src/Gateway/AiControlCenter.Gateway/README.md)
 - [Directions](../../docs/architecture/directions.md)
+- [Agents, Runs і Worker](../../docs/architecture/agents-runs-worker.md)

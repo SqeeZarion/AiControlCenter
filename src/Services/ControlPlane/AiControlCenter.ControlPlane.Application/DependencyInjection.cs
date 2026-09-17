@@ -10,6 +10,7 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddValidatorsFromAssemblyContaining<DirectionApplicationService>();
         services.AddScoped<DirectionApplicationService>();
+        services.AddScoped<AgentDefinitionApplicationService>();
         return services;
     }
 }

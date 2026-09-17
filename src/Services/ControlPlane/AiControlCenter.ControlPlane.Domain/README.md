@@ -1,6 +1,6 @@
 # AiControlCenter.ControlPlane.Domain
 
-Чистий доменний шар ControlPlane містить aggregate root `Direction` і його invariants без залежностей від Application, EF Core або ASP.NET Core.
+Чистий доменний шар ControlPlane містить aggregate roots `Direction` і `AgentDefinition` та їхні invariants без залежностей від Application, EF Core або ASP.NET Core.
 
 ```mermaid
 flowchart BT
@@ -8,7 +8,7 @@ flowchart BT
     Infrastructure["ControlPlane.Infrastructure"] --> Domain
 ```
 
-`Direction` нормалізує назву та унікальний code, перевіряє status і sort order, веде UTC timestamps та виконує явні операції `Archive`/`Restore`. Архівований запис не можна редагувати, активувати або пересортувати до відновлення. Повторна операція над уже досягнутим archive state не змінює сутність.
+Обидва aggregates нормалізують Unicode-назву й code, ведуть UTC timestamps та виконують явні `Archive`/`Restore`. AgentDefinition посилається на Direction, підтримує лише execution type `Test` і не дозволяє mutation в архіві.
 
 `ProjectReference` і NuGet-залежності відсутні.
 

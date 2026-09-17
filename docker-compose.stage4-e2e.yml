@@ -1,0 +1,45 @@
+services:
+  frontend:
+    ports: !override
+      - "18080:80"
+    networks: !override
+      aicontrolcenter:
+        ipv4_address: 172.30.40.10
+  gateway:
+    ports: !override
+      - "15080:8080"
+    networks: !override
+      aicontrolcenter:
+        ipv4_address: 172.30.40.20
+  identity-api:
+    environment:
+      Security__AllowedOrigins__0: http://localhost:18080
+    ports: !override
+      - "15101:8080"
+  controlplane-api:
+    ports: !override
+      - "15102:8080"
+      - "15103:8081"
+  orchestrator-api:
+    ports: !override
+      - "15104:8080"
+      - "15107:8081"
+  worker-service:
+    ports: !override
+      - "15106:8080"
+  integrations-api:
+    ports: !override
+      - "15105:8080"
+  postgres:
+    ports: !override
+      - "15432:5432"
+  rabbitmq:
+    ports: !override
+      - "25672:5672"
+      - "25673:15672"
+
+networks:
+  aicontrolcenter:
+    ipam: !override
+      config:
+        - subnet: 172.30.40.0/24

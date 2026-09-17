@@ -1,0 +1,48 @@
+<section class="form-page">
+  <a routerLink="/agents">← До списку</a>
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Control Plane</p>
+      <h2>{{ isEdit() ? 'Редагування агента' : 'Новий агент' }}</h2>
+    </div>
+  </div>
+  @if (error()) {
+    <p class="notice error" role="alert">{{ error() }}</p>
+  }
+  @if (loading()) {
+    <p class="state">Завантаження…</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <label
+        >Напрямок
+        <select formControlName="directionId">
+          <option value="">Оберіть напрямок</option>
+          @for (direction of directions(); track direction.id) {
+            <option [value]="direction.id">{{ direction.name }}</option>
+          }
+        </select></label
+      ><label>Назва <input formControlName="name" maxlength="100" /></label
+      ><label>Код <input formControlName="code" maxlength="64" placeholder="test-agent" /></label
+      ><label
+        >Опис <textarea formControlName="description" maxlength="1000" rows="5"></textarea>
+      </label>
+      <div class="form-row">
+        <label
+          >Статус
+          <select formControlName="status">
+            <option value="Active">Активний</option>
+            <option value="Inactive">Неактивний</option>
+          </select></label
+        ><label>Тип виконання <input formControlName="executionType" readonly /></label>
+      </div>
+      @if (form.invalid && form.touched) {
+        <small>Перевірте обов’язкові поля, довжину та формат коду.</small>
+      }
+      <div class="actions">
+        <button class="primary" type="submit" [disabled]="saving() || form.disabled">
+          {{ saving() ? 'Збереження…' : 'Зберегти' }}</button
+        ><a routerLink="/agents">Скасувати</a>
+      </div>
+    </form>
+  }
+</section>

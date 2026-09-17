@@ -1,16 +1,16 @@
 # AiControlCenter
 
-AiControlCenter — платформа з вебінтерфейсом і набором ізольованих .NET-сервісів. Поточна реалізація надає захищений вхід, керування користувачами, сесіями й напрямками, єдину точку входу через Gateway, технічні health/service-info перевірки, gRPC-зв’язок і SignalR Ping.
+AiControlCenter — платформа з вебінтерфейсом і набором ізольованих .NET-сервісів. Поточна реалізація надає захищений вхід, керування користувачами, напрямками й тестовими агентами, асинхронні запуски через RabbitMQ/Worker та live status через SignalR.
 
 ## Що вже працює
 
 - Identity: login, refresh із ротацією, logout, зміна пароля, ролі та адміністративне керування користувачами.
 - Gateway: перевірка JWT, authorization policies, YARP-проксіювання та SignalR Hub.
 - ControlPlane: керування життєвим циклом напрямків, статус, порядок сортування, архівування/відновлення та власна PostgreSQL-схема; hard delete відсутній.
-- Orchestrator та Integrations: ізольовані API, health checks і власні PostgreSQL-схеми; бізнес-функції ще не додані.
-- Orchestrator → ControlPlane: захищений технічний gRPC-виклик.
-- Worker і RabbitMQ/MassTransit: підготовлений транспортний каркас без бізнес-повідомлень та consumers.
-- Angular: login, відновлення сесії, memory-only access token, guards, interceptor, зміна пароля, SignalR-статус і панель керування напрямками.
+- ControlPlane: каталог AgentDefinition, прив’язка до Direction, status/archive lifecycle та runnable gRPC snapshot.
+- Orchestrator: AgentRun/RunStep, immutable snapshots, state transitions і transactional outbox.
+- Worker і RabbitMQ/MassTransit: production consumer для bounded deterministic Test workflow та gRPC progress.
+- Angular: панелі «Напрямки / Агенти / Запуски», журнал, live updates і REST reconciliation після reconnect.
 
 ## Архітектура
 
@@ -23,8 +23,10 @@ flowchart LR
     Gateway --> Orchestrator["Orchestrator API"]
     Gateway --> Integrations["Integrations API"]
     Orchestrator -->|"gRPC"| ControlPlane
-    Orchestrator -.->|"MassTransit"| RabbitMQ["RabbitMQ"]
-    Worker -.->|"MassTransit"| RabbitMQ
+    Orchestrator -->|"MassTransit outbox"| RabbitMQ["RabbitMQ"]
+    RabbitMQ -->|"Test command"| Worker
+    Worker -->|"RunProgress gRPC"| Orchestrator
+    RabbitMQ -->|"Run status"| Gateway
     Identity --> PostgreSQL["PostgreSQL"]
     ControlPlane --> PostgreSQL
     Orchestrator --> PostgreSQL
@@ -39,8 +41,10 @@ flowchart LR
 - [SignalR](docs/architecture/communication.md#signalr)
 - [Власність даних](docs/architecture/service-boundaries.md#власність-даних)
 - [Розподіл RSA-ключів](docs/security/security-overview.md#розподіл-rsa-ключів)
+- [Запуск і transactional outbox](docs/architecture/agents-runs-worker.md#запуск-і-transactional-outbox)
+- [SignalR та відновлення стану](docs/architecture/agents-runs-worker.md#signalr-та-відновлення-стану)
 
-Суцільні стрілки показують наявні запити. Пунктиром позначено налаштований транспорт RabbitMQ: бізнес-контрактів і consumers у ньому зараз немає. Gateway передає Bearer token до внутрішніх API, а кожен захищений API повторно перевіряє його.
+Gateway передає Bearer token до внутрішніх API, а кожен захищений API повторно перевіряє його. RabbitMQ має at-least-once semantics; PostgreSQL/REST залишаються джерелом стану після SignalR events.
 
 ## Структура репозиторію
 
@@ -99,3 +103,5 @@ docker compose down
 - [ADR: health semantics](docs/architecture/adr/0005-health-semantics.md)
 - [Directions: модель, API та доступ](docs/architecture/directions.md)
 - [ADR: життєвий цикл Direction](docs/architecture/adr/0006-direction-lifecycle-and-access.md)
+- [Agents, Runs і Worker](docs/architecture/agents-runs-worker.md)
+- [ADR: AgentRun delivery та ownership](docs/architecture/adr/0007-agent-run-delivery-and-ownership.md)

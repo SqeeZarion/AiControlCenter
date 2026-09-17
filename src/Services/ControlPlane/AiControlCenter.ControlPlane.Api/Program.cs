@@ -51,7 +51,10 @@ if (app.Environment.IsDevelopment())
 
 app.MapDefaultHealthEndpoints();
 app.MapDirectionEndpoints();
+app.MapAgentDefinitionEndpoints();
 app.MapGrpcService<ServiceInfoGrpcService>()
+    .RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
+app.MapGrpcService<AgentCatalogGrpcService>()
     .RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
 app.MapGet("/service-info", (IHostEnvironment environment) => Results.Ok(new
 {

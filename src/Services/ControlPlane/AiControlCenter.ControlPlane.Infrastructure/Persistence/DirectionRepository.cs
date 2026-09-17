@@ -79,12 +79,24 @@ internal sealed class ControlPlaneUnitOfWork(ControlPlaneDbContext dbContext) : 
         }
         catch (DbUpdateConcurrencyException)
         {
+            if (dbContext.ChangeTracker.Entries<AgentDefinition>().Any())
+            {
+                throw new AgentDefinitionConflictException(
+                    "Agent definition was changed by another request. Reload and retry.");
+            }
+
             throw new DirectionConflictException(
                 "Direction was changed by another request. Reload and retry.");
         }
         catch (DbUpdateException exception)
             when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
+            if (dbContext.ChangeTracker.Entries<AgentDefinition>().Any())
+            {
+                throw new AgentDefinitionConflictException(
+                    "An agent definition with this code already exists.");
+            }
+
             throw new DirectionConflictException("A direction with this code already exists.");
         }
     }

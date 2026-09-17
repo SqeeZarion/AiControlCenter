@@ -6,7 +6,7 @@
 - Gateway маршрутизує REST через YARP до Identity, ControlPlane, Orchestrator та Integrations.
 - Gateway передає delegated Bearer token; кожен внутрішній API повторно перевіряє JWT і власні policies.
 - Angular працює з Directions через `/api/control-plane/v1/directions`; YARP знімає prefix `/api/control-plane` і передає запит до ControlPlane `/v1/directions` разом із Bearer token.
-- Orchestrator викликає versioned `ServiceInfo` ControlPlane напряму через HTTP/2 gRPC за Docker DNS і передає Bearer token у metadata.
+- Orchestrator викликає versioned `ServiceInfo` і `AgentCatalog.GetRunnableAgent` ControlPlane напряму через HTTP/2 gRPC за Docker DNS і передає Bearer token у metadata.
 
 ```mermaid
 sequenceDiagram
@@ -23,15 +23,17 @@ sequenceDiagram
 
 ## RabbitMQ і MassTransit
 
-Orchestrator та Worker реєструють MassTransit buses, RabbitMQ transport і readiness checks. Production messages, queues, consumers, outbox/inbox та бізнес-процес виконання робіт у коді відсутні. Integration test використовує окремий test-only contract лише для перевірки publish/consume transport.
+Orchestrator атомарно записує `AgentRun` і `ExecuteTestAgentRunV1`/`RunStatusChangedV1` через EF transactional bus outbox. Worker споживає command зі стабільної черги, виконує bounded Test workflow і повертає progress через gRPC. Доставка at least once; повтори нейтралізуються stable message ID, row lock та idempotent transitions.
 
 ```mermaid
 flowchart LR
-    Orchestrator -.->|"transport налаштований"| RabbitMQ
-    Worker -.->|"transport налаштований"| RabbitMQ
+    Orchestrator -->|"command + status через outbox"| RabbitMQ
+    RabbitMQ -->|"ExecuteTestAgentRunV1"| Worker
+    Worker -->|"RunProgress gRPC"| Orchestrator
+    RabbitMQ -->|"RunStatusChangedV1"| Gateway
 ```
 
-Пунктир означає доступний технічний канал, а не реалізований message flow. gRPC не використовується для перевірки Worker; стан bus/queue спостерігається через RabbitMQ, MassTransit health і telemetry.
+Докладно: [Agents, Runs і Worker](agents-runs-worker.md#запуск-і-transactional-outbox).
 
 ## SignalR
 
@@ -42,6 +44,8 @@ Gateway надає `/hubs/system` із технічним методом `Ping`.
 через YARP і не має downstream service. Тому інтеграційна перевірка через справжній
 Kestrel/WebSocket transport доводить роботу Gateway hub, JWT extraction та policy,
 але не перевіряє YARP forwarding.
+
+Для Run events Gateway додає не-Admin connection лише до групи власника з JWT `sub`, а Admin connection — лише до загальної admin-групи. Memberships взаємовиключні, тому Admin-власник не отримує одну подію через дві групи; клієнт ними не керує. Після event або reconnect Angular перечитує REST; stale/duplicate revisions ігноруються.
 
 ## Correlation ID
 
