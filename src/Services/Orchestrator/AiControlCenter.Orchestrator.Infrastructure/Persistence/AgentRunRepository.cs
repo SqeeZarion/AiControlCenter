@@ -24,6 +24,29 @@ internal sealed class AgentRunRepository(OrchestratorDbContext dbContext) : IAge
         return new AgentRunPage(items, total);
     }
 
+    public async Task<AgentRunOperationsData> GetOperationsAsync(
+        Guid requestUserId,
+        bool canViewAll,
+        int recentLimit,
+        CancellationToken cancellationToken)
+    {
+        var visibleRuns = dbContext.AgentRuns.AsNoTracking().AsQueryable();
+        if (!canViewAll) visibleRuns = visibleRuns.Where(run => run.OwnerUserId == requestUserId);
+
+        var counts = await visibleRuns
+            .GroupBy(run => run.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.Status, item => item.Count, cancellationToken);
+        var recent = await visibleRuns
+            .Include(run => run.Steps)
+            .OrderByDescending(run => run.CreatedAt)
+            .ThenBy(run => run.Id)
+            .Take(recentLimit)
+            .ToArrayAsync(cancellationToken);
+
+        return new AgentRunOperationsData(counts, recent);
+    }
+
     public Task<AgentRun?> GetAsync(Guid id, bool tracking, CancellationToken cancellationToken)
     {
         var query = dbContext.AgentRuns.Include(run => run.Steps).AsQueryable();
@@ -31,11 +54,19 @@ internal sealed class AgentRunRepository(OrchestratorDbContext dbContext) : IAge
         return query.SingleOrDefaultAsync(run => run.Id == id, cancellationToken);
     }
 
-    public Task<AgentRun?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.AgentRuns
+    public async Task<AgentRun?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var run = await dbContext.AgentRuns
             .FromSqlInterpolated($"SELECT *, xmin FROM orchestrator.agent_runs WHERE id = {id} FOR UPDATE")
-            .Include(run => run.Steps)
             .SingleOrDefaultAsync(cancellationToken);
+        if (run is null) return null;
+
+        // Use a fresh READ COMMITTED statement after the row lock is acquired. Loading the
+        // collection in the locking query can retain its pre-wait snapshot and miss a step
+        // committed by the transaction that released the lock.
+        await dbContext.Entry(run).Collection(item => item.Steps).LoadAsync(cancellationToken);
+        return run;
+    }
 }
 
 //зберігає зміни й керує транзакціями.

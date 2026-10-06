@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Threading.Channels;
 using AiControlCenter.Contracts.V1;
 using AiControlCenter.Gateway;
 using AiControlCenter.Gateway.Hubs;
@@ -151,7 +152,67 @@ public sealed class GatewayWebSocketKestrelTests
         Assert.Equal(1, newEvents.Count(afterReconnect.EventId));
     }
 
-    private static WebApplicationFactory<GatewayMarker> CreateKestrelFactory()
+    [Fact]
+    public async Task AutomaticReconnectSurvivesKestrelRestartAndDeliversTheNextEventExactlyOnce()
+    {
+        var firstFactory = CreateKestrelFactory();
+        WebApplicationFactory<GatewayMarker>? replacementFactory = null;
+        try
+        {
+            Uri gatewayAddress;
+            using (var client = firstFactory.CreateClient())
+                gatewayAddress = client.BaseAddress!;
+
+            var ownerId = Guid.NewGuid();
+            await using var connection = CreateWebSocketConnection(
+                gatewayAddress,
+                TestJwtTokenFactory.Issue("User", ownerId),
+                automaticReconnect: true);
+            var events = new RunEventProbe(connection);
+            var reconnecting = NewCompletion();
+            var reconnected = NewCompletion();
+            connection.Reconnecting += _ =>
+            {
+                reconnecting.TrySetResult();
+                return Task.CompletedTask;
+            };
+            connection.Reconnected += _ =>
+            {
+                reconnected.TrySetResult();
+                return Task.CompletedTask;
+            };
+            await connection.StartAsync();
+
+            await firstFactory.DisposeAsync();
+            await reconnecting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            replacementFactory = CreateKestrelFactory(gatewayAddress.Port);
+            using var replacementClient = replacementFactory.CreateClient();
+            await reconnected.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var pong = await connection.InvokeAsync<TechnicalPong>("Ping");
+            Assert.Equal("gateway", pong.Service);
+
+            var publish = replacementFactory.Services.GetRequiredService<IPublishEndpoint>();
+            var runId = Guid.NewGuid();
+            var afterReconnect = CreateRunEvent(runId, ownerId, 1);
+            var sentinel = CreateRunEvent(Guid.NewGuid(), ownerId, 1);
+            await publish.Publish(afterReconnect);
+            await events.WaitForEventCountAsync(afterReconnect.EventId, 1);
+            await publish.Publish(sentinel);
+            await events.WaitForEventCountAsync(sentinel.EventId, 1);
+
+            Assert.Equal(HubConnectionState.Connected, connection.State);
+            Assert.Equal(1, events.Count(afterReconnect.EventId));
+        }
+        finally
+        {
+            if (replacementFactory is not null)
+                await replacementFactory.DisposeAsync();
+            await firstFactory.DisposeAsync();
+        }
+    }
+
+    private static WebApplicationFactory<GatewayMarker> CreateKestrelFactory(int port = 0)
     {
         var factory = new WebApplicationFactory<GatewayMarker>()
             .WithWebHostBuilder(builder => builder
@@ -159,11 +220,17 @@ public sealed class GatewayWebSocketKestrelTests
                 .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath)
                 .ConfigureServices(services => services.AddMassTransitTestHarness(configurator =>
                     configurator.AddConsumer<RunStatusChangedConsumer>())));
-        factory.UseKestrel(0);
+        factory.UseKestrel(port);
         return factory;
     }
 
-    private static HubConnection CreateWebSocketConnection(Uri baseAddress, string? accessToken)
+    private static TaskCompletionSource NewCompletion() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static HubConnection CreateWebSocketConnection(
+        Uri baseAddress,
+        string? accessToken,
+        bool automaticReconnect = false)
     {
         var path = "/hubs/system";
         if (accessToken is not null)
@@ -171,13 +238,23 @@ public sealed class GatewayWebSocketKestrelTests
             path += $"?access_token={Uri.EscapeDataString(accessToken)}";
         }
 
-        return new HubConnectionBuilder()
+        var builder = new HubConnectionBuilder()
             .WithUrl(new Uri(baseAddress, path), options =>
             {
                 options.Transports = HttpTransportType.WebSockets;
                 options.SkipNegotiation = true;
-            })
-            .Build();
+            });
+        if (automaticReconnect)
+        {
+            builder.WithAutomaticReconnect([
+                TimeSpan.Zero,
+                TimeSpan.FromMilliseconds(250),
+                TimeSpan.FromMilliseconds(500),
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
+            ]);
+        }
+        return builder.Build();
     }
 
     private static RunStatusChangedV1 CreateRunEvent(Guid runId, Guid ownerId, long revision) => new(
@@ -187,10 +264,12 @@ public sealed class GatewayWebSocketKestrelTests
     private sealed class RunEventProbe
     {
         private readonly ConcurrentQueue<RunStatusChangedV1> events = new();
+        private readonly Channel<bool> eventSignal = Channel.CreateUnbounded<bool>();
         public RunEventProbe(HubConnection connection) =>
             connection.On<RunStatusChangedV1>("RunStatusChanged", message =>
             {
                 events.Enqueue(message);
+                eventSignal.Writer.TryWrite(true);
             });
 
         public RunStatusChangedV1[] All => events.ToArray();
@@ -209,11 +288,11 @@ public sealed class GatewayWebSocketKestrelTests
         public Task WaitForRunCountAsync(Guid runId, int count) =>
             WaitUntilAsync(() => events.Count(message => message.RunId == runId) >= count);
 
-        private static async Task WaitUntilAsync(Func<bool> condition)
+        private async Task WaitUntilAsync(Func<bool> condition)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             while (!condition())
-                await Task.Delay(TimeSpan.FromMilliseconds(20), timeout.Token);
+                await eventSignal.Reader.ReadAsync(timeout.Token);
         }
     }
 }

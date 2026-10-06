@@ -147,6 +147,38 @@ public sealed class GatewayFoundationTests : IClassFixture<WebApplicationFactory
     }
 
     [Fact]
+    public async Task OperationsSnapshotRejectsAnonymousRequest()
+    {
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/api/gateway/v1/operations/snapshot");
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task OperationsSnapshotReturnsSafeDegradedDataWhenDependenciesAreUnavailable()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", TestJwtTokenFactory.Issue());
+
+        using var response = await client.GetAsync("/api/gateway/v1/operations/snapshot");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(body);
+        Assert.True(document.RootElement.TryGetProperty("generatedAt", out _));
+        Assert.True(document.RootElement.GetProperty("nodes").GetArrayLength() > 0);
+        Assert.True(document.RootElement.TryGetProperty("queues", out _));
+        Assert.True(document.RootElement.TryGetProperty("workload", out _));
+        Assert.All(
+            document.RootElement.GetProperty("nodes").EnumerateArray(),
+            node => Assert.Equal(JsonValueKind.String, node.GetProperty("state").ValueKind));
+        Assert.DoesNotContain("password", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("authorization", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("connectionString", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task JwtWithUnknownKeyIdIsRejectedBeforeProxying()
     {
         using var client = factory.CreateClient();

@@ -56,6 +56,29 @@ public sealed class AgentRunApplicationService(
         return ToDto(run);
     }
 
+    public async Task<AgentRunOperationsDto> GetOperationsAsync(
+        GetAgentRunOperationsQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (query.RequestUserId == Guid.Empty)
+            throw new ValidationException("A valid user id is required.");
+        if (query.RecentLimit is < 1 or > GetAgentRunOperationsQuery.MaximumRecentLimit)
+            throw new ValidationException(
+                $"Recent limit must be between 1 and {GetAgentRunOperationsQuery.MaximumRecentLimit}.");
+
+        var data = await runs.GetOperationsAsync(
+            query.RequestUserId,
+            query.CanViewAll,
+            query.RecentLimit,
+            cancellationToken);
+        return new AgentRunOperationsDto(
+            Count(data, AgentRunStatus.Queued),
+            Count(data, AgentRunStatus.Running),
+            Count(data, AgentRunStatus.Succeeded),
+            Count(data, AgentRunStatus.Failed),
+            data.RecentRuns.Select(ToOperationsDto).ToArray());
+    }
+
     public Task<RunProgressResult> BeginAsync(
         BeginAgentRunCommand command,
         CancellationToken cancellationToken) =>
@@ -135,4 +158,27 @@ public sealed class AgentRunApplicationService(
         run.Steps.OrderBy(step => step.Sequence).Select(step => new RunStepDto(
             step.Id, step.Sequence, step.Name, step.Status, step.Log,
             step.StartedAt, step.UpdatedAt, step.CompletedAt)).ToArray());
+
+    private static int Count(AgentRunOperationsData data, AgentRunStatus status) =>
+        data.Counts.TryGetValue(status, out var count) ? count : 0;
+
+    private static AgentRunOperationsItemDto ToOperationsDto(AgentRun run)
+    {
+        var activeStep = run.Steps
+            .OrderByDescending(step => step.Sequence)
+            .FirstOrDefault(step => step.Status == RunStepStatus.Running)
+            ?? run.Steps.OrderByDescending(step => step.Sequence).FirstOrDefault();
+        return new AgentRunOperationsItemDto(
+            run.Id,
+            run.AgentName,
+            run.DirectionName,
+            run.Status,
+            run.Revision,
+            run.CreatedAt,
+            run.StartedAt,
+            run.CompletedAt,
+            activeStep?.Sequence,
+            activeStep?.Name,
+            activeStep?.Status);
+    }
 }

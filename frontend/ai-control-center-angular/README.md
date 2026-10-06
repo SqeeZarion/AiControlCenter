@@ -45,6 +45,7 @@ sequenceDiagram
 | `/agents`              | список і запуск Test agent, усі platform roles         |
 | `/agents/new`          | створення, `roleGuard(Admin, Developer)`               |
 | `/agents/:id/edit`     | редагування, `roleGuard(Admin, Developer)`             |
+| `/home`                | Operations Center: topology, health, queues і Runs     |
 | `/runs`                | власні Runs; Admin бачить усі                          |
 | `/runs/:id`            | деталі, кроки, журнал і live status                    |
 
@@ -59,7 +60,7 @@ npm.cmd test --prefix .\frontend\ai-control-center-angular -- --watch=false
 npm.cmd run build --prefix .\frontend\ai-control-center-angular -- --configuration production
 ```
 
-Тести перевіряють ініціалізацію/refresh сесії, memory-only token, захисні guards, поведінку interceptor без циклу повторних refresh, API mapping Directions/Agents/Runs і відхилення stale або duplicate Run events.
+Тести перевіряють ініціалізацію/refresh сесії, memory-only token, збереження активної сесії під час transient outage, захисні guards, production `RealtimeService` через injectable SignalR factory, bounded reconnect/polling, single event subscription, API mapping Directions/Agents/Runs/Operations і REST reconciliation після SignalR event або reconnect. Окремий Kestrel integration test зупиняє та відновлює Gateway на тому самому endpoint і підтверджує automatic reconnect того самого SignalR client без ручного створення нового connection.
 
 ## Пов’язана документація
 
@@ -69,3 +70,4 @@ npm.cmd run build --prefix .\frontend\ai-control-center-angular -- --configurati
 - [Gateway](../../src/Gateway/AiControlCenter.Gateway/README.md)
 - [Directions](../../docs/architecture/directions.md)
 - [Agents, Runs і Worker](../../docs/architecture/agents-runs-worker.md)
+- [Operations Center і live observability](../../docs/architecture/operations-center.md)

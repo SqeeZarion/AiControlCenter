@@ -18,6 +18,7 @@ sequenceDiagram
 - `/service-info` потребує `AnyPlatformUser` і `PasswordChanged`.
 - `/service-info/control-plane` передає вхідний Bearer token у gRPC metadata.
 - `POST /v1/runs`, `GET /v1/runs`, `GET /v1/runs/{id}` вимагають platform user і `PasswordChanged`; лише Admin бачить чужі Runs.
+- `GET /v1/operations/runs` повертає bounded owner-aware counts і recent summaries для Gateway Operations Center без input, result або logs.
 - `RunProgress` приймає authenticated Worker progress на HTTP/2 endpoint.
 - EF bus outbox атомарно зберігає Run, execution command і status event; fault consumer завершує Run після вичерпання retries.
 - Readiness перевіряє PostgreSQL і RabbitMQ; liveness не залежить від них.

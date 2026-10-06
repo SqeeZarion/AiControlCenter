@@ -33,6 +33,17 @@ public static class AgentRunEndpointExtensions
             Guid id, HttpContext context, AgentRunApplicationService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAsync(new GetAgentRunQuery(
                 id, GetUserId(context.User), context.User.IsInRole("Admin")), cancellationToken)));
+
+        endpoints.MapGet("/v1/operations/runs", async (
+            int? recentLimit,
+            HttpContext context,
+            AgentRunApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetOperationsAsync(new GetAgentRunOperationsQuery(
+                GetUserId(context.User),
+                context.User.IsInRole("Admin"),
+                recentLimit ?? 8), cancellationToken)))
+            .RequireAuthorization(SecurityPolicyNames.AnyPlatformUser, SecurityPolicyNames.PasswordChanged);
         return endpoints;
     }
 

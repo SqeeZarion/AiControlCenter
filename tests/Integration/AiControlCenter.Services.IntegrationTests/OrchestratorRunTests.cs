@@ -172,9 +172,11 @@ public sealed class OrchestratorRunTests : IAsyncLifetime
             Name = "Parallel",
             Status = RunStepProgressStatus.Running,
         };
+        runLockBarrier.Arm(2);
         var parallel = await Task.WhenAll(
             progress.ReportStepAsync(step, headers).ResponseAsync,
             progress.ReportStepAsync(step, headers).ResponseAsync).WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(runLockBarrier.HitCount >= 2);
         Assert.Single(parallel, result => !result.AlreadyApplied);
         Assert.Single(parallel, result => result.AlreadyApplied);
         await progress.ReportStepAsync(new ReportStepRequest
@@ -435,6 +437,40 @@ public sealed class OrchestratorRunTests : IAsyncLifetime
         var progress = new RunProgress.RunProgressClient(channel);
         var exception = await Assert.ThrowsAsync<RpcException>(() => progress.BeginRunAsync(new BeginRunRequest { RunId = run.Id.ToString(), MessageId = Guid.NewGuid().ToString() }).ResponseAsync);
         Assert.Equal(StatusCode.Unauthenticated, exception.StatusCode);
+    }
+
+    [Fact]
+    public async Task OperationsSummaryIsOwnerAwareAndDoesNotExposeRunPayloads()
+    {
+        await ClearAsync();
+        var otherOwnerId = Guid.NewGuid();
+        using var owner = CreateClient("User", OwnerId);
+        using var otherOwner = CreateClient("Developer", otherOwnerId);
+        using var firstResponse = await owner.PostAsJsonAsync(
+            "/v1/runs",
+            new { agentId = RunnableAgentCatalog.AgentId, input = "owner-sensitive-input", expectedOutcome = "Succeed" });
+        using var secondResponse = await otherOwner.PostAsJsonAsync(
+            "/v1/runs",
+            new { agentId = RunnableAgentCatalog.AgentId, input = "other-sensitive-input", expectedOutcome = "Fail" });
+        firstResponse.EnsureSuccessStatusCode();
+        secondResponse.EnsureSuccessStatusCode();
+
+        using var ownerResponse = await owner.GetAsync("/v1/operations/runs?recentLimit=8");
+        ownerResponse.EnsureSuccessStatusCode();
+        var ownerBody = await ownerResponse.Content.ReadAsStringAsync();
+        var ownerSummary = JsonSerializer.Deserialize<AgentRunOperationsDto>(ownerBody, WebJson)!;
+        Assert.Equal(1, ownerSummary.Queued);
+        Assert.Single(ownerSummary.RecentRuns);
+        Assert.DoesNotContain("sensitive-input", ownerBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("result", ownerBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("log", ownerBody, StringComparison.OrdinalIgnoreCase);
+
+        using var admin = CreateClient("Admin", Guid.NewGuid());
+        var adminSummary = await admin.GetFromJsonAsync<AgentRunOperationsDto>(
+            "/v1/operations/runs?recentLimit=8",
+            WebJson);
+        Assert.Equal(2, adminSummary!.Queued);
+        Assert.Equal(2, adminSummary.RecentRuns.Count);
     }
 
     [Fact]

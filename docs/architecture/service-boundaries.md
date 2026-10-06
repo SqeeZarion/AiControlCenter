@@ -16,7 +16,7 @@ flowchart TB
 
 ## Gateway
 
-Публічна точка входу для REST і технічного SignalR Hub. Не володіє даними, не посилається на service layers, перевіряє Identity-issued JWT і застосовує YARP policies.
+Публічна точка входу для REST і технічного SignalR Hub. Не володіє business-даними, не посилається на service layers, перевіряє Identity-issued JWT і застосовує YARP policies. Read-only Operations Center BFF агрегує bounded health/queue/status snapshots, але не зберігає їх і не повертає secrets.
 
 ## Identity
 

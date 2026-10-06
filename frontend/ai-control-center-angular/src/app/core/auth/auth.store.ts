@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -79,7 +80,11 @@ export class AuthStore {
       const session = await firstValueFrom(this.auth.refresh());
       await this.applySession(session);
       return true;
-    } catch {
+    } catch (error: unknown) {
+      if (this.canKeepCurrentSession(error)) {
+        return false;
+      }
+
       await this.clearSession();
       if (this.redirectOnRefreshFailure) {
         const returnUrl = safeLocalReturnUrl(this.router.url);
@@ -90,6 +95,20 @@ export class AuthStore {
       }
       return false;
     }
+  }
+
+  private canKeepCurrentSession(error: unknown): boolean {
+    if (this.stateValue() !== 'authenticated' || !this.accessTokens.token()) {
+      return false;
+    }
+
+    if (!(error instanceof HttpErrorResponse)) {
+      return false;
+    }
+
+    return (
+      error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500
+    );
   }
 
   private async applySession(session: AuthSessionDto): Promise<void> {

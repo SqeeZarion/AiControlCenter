@@ -1,0 +1,281 @@
+<section class="operations-shell" [class.is-stale]="stale()">
+  <div class="operations-heading">
+    <div>
+      <p class="eyebrow">Live observability · Stage 4.1</p>
+      <h2>Operations Center</h2>
+      <p class="intro">
+        Фактичний шлях запуску, readiness сервісів, черги та останні persisted Runs.
+      </p>
+    </div>
+    <div class="heading-actions">
+      <span class="global-status" [class]="'global-status state-' + state().toLowerCase()">
+        <span class="status-dot" aria-hidden="true"></span>
+        {{ state() }}
+      </span>
+      <button type="button" (click)="refreshNow()" [disabled]="loading()">
+        {{ loading() ? 'Оновлення…' : 'Оновити' }}
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="offline-banner" role="status">
+      <strong>{{ state() }}</strong>
+      <span>{{ error() }}</span>
+    </div>
+  }
+
+  @if (snapshot(); as data) {
+    <section class="metric-grid" aria-label="Оперативні метрики">
+      <article>
+        <span>Активні агенти</span>
+        <strong>{{ data.workload.activeAgents ?? '—' }}</strong>
+        <small>із {{ data.workload.totalAgents ?? '—' }} доступних</small>
+      </article>
+      <article>
+        <span>Queued Runs</span>
+        <strong>{{ data.workload.queuedRuns ?? '—' }}</strong>
+        <small>очікують Worker</small>
+      </article>
+      <article>
+        <span>Running Runs</span>
+        <strong>{{ data.workload.runningRuns ?? '—' }}</strong>
+        <small>виконуються зараз</small>
+      </article>
+      <article>
+        <span>Terminal Runs</span>
+        <strong>{{ (data.workload.succeededRuns ?? 0) + (data.workload.failedRuns ?? 0) }}</strong>
+        <small>
+          {{ data.workload.succeededRuns ?? '—' }} succeeded ·
+          {{ data.workload.failedRuns ?? '—' }} failed
+        </small>
+      </article>
+    </section>
+
+    <section class="command-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">System topology</p>
+          <h3>Карта компонентів</h3>
+        </div>
+        <p>
+          Snapshot {{ formatDate(data.generatedAt) }} · SignalR
+          {{ realtime.isConnected() ? 'connected' : 'reconnecting/offline' }}
+        </p>
+      </div>
+
+      <div class="topology-grid" aria-label="Карта сервісів AiControlCenter">
+        @for (node of data.nodes; track node.id) {
+          <button
+            type="button"
+            class="topology-node"
+            [class]="'topology-node node-' + node.id + ' state-' + node.state.toLowerCase()"
+            [attr.aria-pressed]="selectedNodeId() === node.id"
+            (click)="selectNode(node.id)"
+          >
+            <span class="node-kind">{{ node.kind }}</span>
+            <strong>{{ node.label }}</strong>
+            <span class="node-state"><i aria-hidden="true"></i>{{ node.state }}</span>
+            <small>
+              @if (node.latencyMilliseconds !== null) {
+                {{ node.latencyMilliseconds.toFixed(0) }} ms
+              } @else {
+                latency unavailable
+              }
+            </small>
+          </button>
+        }
+      </div>
+
+      <ol class="execution-flow" aria-label="Фактичний шлях виконання AgentRun">
+        <li>Gateway</li>
+        <li>Orchestrator</li>
+        <li>RabbitMQ</li>
+        <li>Worker</li>
+        <li>Orchestrator</li>
+        <li>SignalR</li>
+      </ol>
+    </section>
+
+    <div class="details-grid">
+      <section class="detail-panel">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">Selected node</p>
+            <h3>{{ selectedNode()?.label ?? 'Виберіть компонент' }}</h3>
+          </div>
+          @if (selectedNode(); as node) {
+            <span [class]="'mini-status state-' + node.state.toLowerCase()">{{ node.state }}</span>
+          }
+        </div>
+        @if (selectedNode(); as node) {
+          <dl class="node-details">
+            <div>
+              <dt>Остання перевірка</dt>
+              <dd>{{ formatDate(node.lastCheckedAt) }}</dd>
+            </div>
+            <div>
+              <dt>Останній успіх</dt>
+              <dd>{{ node.lastSuccessfulAt ? formatDate(node.lastSuccessfulAt) : 'ще немає' }}</dd>
+            </div>
+            <div>
+              <dt>Latency</dt>
+              <dd>
+                {{
+                  node.latencyMilliseconds === null
+                    ? 'недоступно'
+                    : node.latencyMilliseconds.toFixed(1) + ' ms'
+                }}
+              </dd>
+            </div>
+          </dl>
+          @if (node.checks.length) {
+            <ul class="check-list">
+              @for (check of node.checks; track check.name) {
+                <li>
+                  <span>{{ check.name }}</span>
+                  <strong>{{ check.status }}</strong>
+                  <small>{{ check.durationMilliseconds.toFixed(1) }} ms</small>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="muted">Додаткових readiness checks для цього вузла немає.</p>
+          }
+        }
+      </section>
+
+      <section class="detail-panel">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">RabbitMQ</p>
+            <h3>Черги виконання</h3>
+          </div>
+        </div>
+        <div class="queue-list">
+          @for (queue of data.queues; track queue.name) {
+            <article [class]="'queue-card state-' + queue.state.toLowerCase()">
+              <div>
+                <strong>{{ queue.name }}</strong>
+                <span>{{ queue.state }}</span>
+              </div>
+              <dl>
+                <div>
+                  <dt>Ready</dt>
+                  <dd>{{ queue.messagesReady ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt>Unacked</dt>
+                  <dd>{{ queue.messagesUnacknowledged ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt>Consumers</dt>
+                  <dd>{{ queue.consumers ?? '—' }}</dd>
+                </div>
+              </dl>
+            </article>
+          }
+        </div>
+      </section>
+    </div>
+
+    <section class="runs-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Persisted source of truth</p>
+          <h3>Останні Runs</h3>
+        </div>
+        <a routerLink="/runs">Усі запуски →</a>
+      </div>
+      @if (data.workload.recentRuns.length) {
+        <div class="run-strip">
+          @for (run of data.workload.recentRuns; track run.id) {
+            <button
+              type="button"
+              class="run-card"
+              [class.selected]="selectedRunId() === run.id"
+              (click)="selectRun(run.id)"
+            >
+              <span>{{ run.directionName }}</span>
+              <strong>{{ run.agentName }}</strong>
+              <em [class]="'run-status status-' + run.status.toLowerCase()">{{ run.status }}</em>
+              <small>revision {{ run.revision }}</small>
+              <small>
+                {{
+                  run.activeStepName ?? (run.status === 'Queued' ? 'Очікує виконання' : 'Terminal')
+                }}
+              </small>
+            </button>
+          }
+        </div>
+      } @else {
+        <p class="empty-state">Runs ще немає або Orchestrator тимчасово недоступний.</p>
+      }
+
+      @if (selectedRunId()) {
+        <div class="run-inspector">
+          @if (runLoading()) {
+            <p class="muted">Оновлюємо persisted Run…</p>
+          }
+          @if (runError()) {
+            <p class="run-error">{{ runError() }}</p>
+          }
+          @if (selectedRun(); as run) {
+            <div class="run-inspector-heading">
+              <div>
+                <span>{{ run.directionName }} · {{ run.agentCode }}</span>
+                <h4>{{ run.agentName }}</h4>
+              </div>
+              <a [routerLink]="['/runs', run.id]">Повні деталі →</a>
+            </div>
+            <dl class="node-details run-summary">
+              <div>
+                <dt>Status</dt>
+                <dd>{{ runStatusLabel(run.status) }}</dd>
+              </div>
+              <div>
+                <dt>Revision</dt>
+                <dd>{{ run.revision }}</dd>
+              </div>
+              <div>
+                <dt>Started</dt>
+                <dd>{{ run.startedAt ? formatDate(run.startedAt) : '—' }}</dd>
+              </div>
+              <div>
+                <dt>Completed</dt>
+                <dd>{{ run.completedAt ? formatDate(run.completedAt) : '—' }}</dd>
+              </div>
+            </dl>
+            @if (run.steps.length) {
+              <ol class="run-steps">
+                @for (step of run.steps; track step.id) {
+                  <li>
+                    <span>{{ step.sequence }}</span>
+                    <div>
+                      <strong>{{ step.name }}</strong>
+                      <small>{{ step.status }}</small>
+                      @if (step.log) {
+                        <p>{{ step.log }}</p>
+                      }
+                    </div>
+                  </li>
+                }
+              </ol>
+            }
+            @if (run.result || run.error) {
+              <p [class]="run.error ? 'terminal-result error' : 'terminal-result'">
+                {{ run.error ?? run.result }}
+              </p>
+            }
+          }
+        </div>
+      }
+    </section>
+  } @else if (loading()) {
+    <div class="initial-state">Завантажуємо topology snapshot…</div>
+  } @else {
+    <div class="initial-state disconnected">
+      Gateway недоступний. Панель продовжить bounded reconnect автоматично.
+    </div>
+  }
+</section>

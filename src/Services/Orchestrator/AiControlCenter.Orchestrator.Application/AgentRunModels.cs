@@ -22,6 +22,10 @@ public sealed record ListAgentRunsQuery(
 }
 
 public sealed record GetAgentRunQuery(Guid Id, Guid RequestUserId, bool CanViewAll);
+public sealed record GetAgentRunOperationsQuery(Guid RequestUserId, bool CanViewAll, int RecentLimit = 8)
+{
+    public const int MaximumRecentLimit = 20;
+}
 public sealed record BeginAgentRunCommand(Guid RunId, Guid MessageId);
 public sealed record ReportRunStepCommand(
     Guid RunId,
@@ -80,5 +84,25 @@ public sealed record AgentRunListDto(
 {
     public int TotalPages => TotalCount == 0 ? 0 : (int)Math.Ceiling((double)TotalCount / PageSize);
 }
+
+public sealed record AgentRunOperationsItemDto(
+    Guid Id,
+    string AgentName,
+    string DirectionName,
+    AgentRunStatus Status,
+    long Revision,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    int? ActiveStepSequence,
+    string? ActiveStepName,
+    RunStepStatus? ActiveStepStatus);
+
+public sealed record AgentRunOperationsDto(
+    int Queued,
+    int Running,
+    int Succeeded,
+    int Failed,
+    IReadOnlyCollection<AgentRunOperationsItemDto> RecentRuns);
 
 public sealed record RunProgressResult(bool Accepted, bool AlreadyApplied, long Revision, AgentRunStatus Status);

@@ -5,12 +5,12 @@ AiControlCenter — платформа з вебінтерфейсом і наб
 ## Що вже працює
 
 - Identity: login, refresh із ротацією, logout, зміна пароля, ролі та адміністративне керування користувачами.
-- Gateway: перевірка JWT, authorization policies, YARP-проксіювання та SignalR Hub.
+- Gateway: перевірка JWT, authorization policies, YARP-проксіювання, SignalR Hub і захищений read-only Operations Center snapshot.
 - ControlPlane: керування життєвим циклом напрямків, статус, порядок сортування, архівування/відновлення та власна PostgreSQL-схема; hard delete відсутній.
 - ControlPlane: каталог AgentDefinition, прив’язка до Direction, status/archive lifecycle та runnable gRPC snapshot.
 - Orchestrator: AgentRun/RunStep, immutable snapshots, state transitions і transactional outbox.
 - Worker і RabbitMQ/MassTransit: production consumer для bounded deterministic Test workflow та gRPC progress.
-- Angular: панелі «Напрямки / Агенти / Запуски», журнал, live updates і REST reconciliation після reconnect.
+- Angular: маршрут «Головна» з Operations Center, панелі «Напрямки / Агенти / Запуски», журнал, live updates, bounded polling і REST reconciliation після reconnect.
 
 ## Архітектура
 
@@ -104,4 +104,5 @@ docker compose down
 - [Directions: модель, API та доступ](docs/architecture/directions.md)
 - [ADR: життєвий цикл Direction](docs/architecture/adr/0006-direction-lifecycle-and-access.md)
 - [Agents, Runs і Worker](docs/architecture/agents-runs-worker.md)
+- [Operations Center і live observability](docs/architecture/operations-center.md)
 - [ADR: AgentRun delivery та ownership](docs/architecture/adr/0007-agent-run-delivery-and-ownership.md)

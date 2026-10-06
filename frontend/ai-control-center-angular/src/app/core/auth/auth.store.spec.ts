@@ -93,4 +93,24 @@ describe('AuthStore', () => {
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith(['/login'], expect.anything());
   });
+
+  it('keeps an authenticated in-memory session during a transient refresh outage', async () => {
+    const login = store.login({ email: 'admin@example.test', password: 'password' });
+    http.expectOne('/api/identity/v1/auth/login').flush(session);
+    await login;
+
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const refreshed = store.refresh();
+    http.expectOne('/api/identity/v1/auth/refresh').flush(null, {
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    expect(await refreshed).toBe(false);
+    expect(store.state()).toBe('authenticated');
+    expect(store.user()).toEqual(session.user);
+    expect(accessTokens.token()).toBe(session.accessToken);
+    expect(navigate).not.toHaveBeenCalled();
+  });
 });

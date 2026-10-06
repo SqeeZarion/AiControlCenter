@@ -21,6 +21,7 @@ sequenceDiagram
 - `/api/identity/v1/auth/csrf|login|refresh|logout` — anonymous proxy routes; решта Identity routes захищені.
 - `/api/control-plane/**`, включно з `/api/control-plane/v1/directions`, а також `/api/orchestrator/**` і `/api/integrations/**` — потребують `PasswordChanged`.
 - `/api/gateway/service-info` і `/service-info` — технічна інформація; anonymous лише в Development.
+- `/api/gateway/v1/operations/snapshot` — захищений read-only BFF snapshot readiness, RabbitMQ queue metrics і owner-aware persisted Runs; credentials та connection strings не повертаються.
 - `/hubs/system` — `SystemHub.Ping`, authenticated і `PasswordChanged`, з закриттям підключення після завершення token.
 - YARP передає вхідний `Authorization` header стандартною поведінкою; окремого transform provider для Bearer token немає.
 
@@ -32,4 +33,4 @@ Gateway не містить use cases сервісів і посилається
 dotnet run --project .\src\Gateway\AiControlCenter.Gateway\AiControlCenter.Gateway.csproj
 ```
 
-[Головний README](../../../README.md) · [Security](../../BuildingBlocks/AiControlCenter.Security/README.md) · [Gateway integration tests](../../../tests/Integration/AiControlCenter.Gateway.IntegrationTests/README.md)
+[Головний README](../../../README.md) · [Operations Center](../../../docs/architecture/operations-center.md) · [Security](../../BuildingBlocks/AiControlCenter.Security/README.md) · [Gateway integration tests](../../../tests/Integration/AiControlCenter.Gateway.IntegrationTests/README.md)

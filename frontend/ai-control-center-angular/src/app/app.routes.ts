@@ -3,6 +3,7 @@ import { authGuard, passwordChangedGuard } from './core/auth/auth.guard';
 import { roleGuard } from './core/auth/role.guard';
 import { ChangePasswordComponent } from './features/auth/change-password/change-password.component';
 import { LoginComponent } from './features/auth/login/login.component';
+import { OperationsCenterComponent } from './features/operations/operations-center.component';
 import { DirectionFormComponent } from './features/directions/direction-form.component';
 import { DirectionListComponent } from './features/directions/direction-list.component';
 import { AgentFormComponent } from './features/agents/agent-form.component';
@@ -21,7 +22,8 @@ export const routes: Routes = [
     component: ShellComponent,
     canActivate: [authGuard, passwordChangedGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'directions' },
+      { path: '', pathMatch: 'full', redirectTo: 'home' },
+      { path: 'home', component: OperationsCenterComponent },
       { path: 'directions', component: DirectionListComponent },
       { path: 'agents', component: AgentListComponent },
       { path: 'runs', component: RunListComponent },

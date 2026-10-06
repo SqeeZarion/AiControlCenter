@@ -47,6 +47,8 @@ Kestrel/WebSocket transport доводить роботу Gateway hub, JWT extra
 
 Для Run events Gateway додає не-Admin connection лише до групи власника з JWT `sub`, а Admin connection — лише до загальної admin-групи. Memberships взаємовиключні, тому Admin-власник не отримує одну подію через дві групи; клієнт ними не керує. Після event або reconnect Angular перечитує REST; stale/duplicate revisions ігноруються.
 
+Operations Center використовує SignalR лише як тригер для швидкої REST reconciliation. Оглядовий snapshot формується захищеним Gateway BFF endpoint із bounded health/queue запитів та owner-aware persisted даних. Детально: [Operations Center і live observability](operations-center.md).
+
 ## Correlation ID
 
 `CorrelationIdMiddleware` приймає trimmed `X-Correlation-ID` довжиною до 128 символів без control characters. Інакше використовується ASP.NET Core `TraceIdentifier`. Обране значення записується у response header, `HttpContext.TraceIdentifier` та logging scope як `CorrelationId`.

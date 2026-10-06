@@ -6,11 +6,20 @@ public interface IAgentRunRepository
 {
     void Add(AgentRun run);
     Task<AgentRunPage> ListAsync(ListAgentRunsQuery query, CancellationToken cancellationToken);
+    Task<AgentRunOperationsData> GetOperationsAsync(
+        Guid requestUserId,
+        bool canViewAll,
+        int recentLimit,
+        CancellationToken cancellationToken);
     Task<AgentRun?> GetAsync(Guid id, bool tracking, CancellationToken cancellationToken);
     Task<AgentRun?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public sealed record AgentRunPage(IReadOnlyCollection<AgentRun> Items, int TotalCount);
+
+public sealed record AgentRunOperationsData(
+    IReadOnlyDictionary<AgentRunStatus, int> Counts,
+    IReadOnlyCollection<AgentRun> RecentRuns);
 
 public interface IOrchestratorUnitOfWork
 {
