@@ -2,9 +2,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AiControlCenter.Integrations.Application\AiControlCenter.Integrations.Application.csproj" />
+    <ProjectReference Include="..\AiControlCenter.Integrations.Domain\AiControlCenter.Integrations.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 

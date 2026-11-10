@@ -25,6 +25,13 @@ message RunnableAgentReply {
   string direction_name = 8;
   string direction_code = 9;
   int64 direction_version = 10;
+  string system_prompt = 11;
+  string model_routes_json = 12;
+  string tool_policy_json = 13;
+  int32 max_input_tokens = 14;
+  int32 max_output_tokens = 15;
+  string max_estimated_cost_usd = 16;
+  int32 max_attempts = 17;
 }
 
 //Цей gRPC-сервіс працює в Orchestrator.
@@ -33,8 +40,134 @@ service RunProgress {
   rpc BeginRun (BeginRunRequest) returns (RunProgressReply);
   //Worker повідомляє стан конкретного кроку.
   rpc ReportStep (ReportStepRequest) returns (RunProgressReply);
+  rpc ReportAttempt (ReportAiAttemptRequest) returns (RunProgressReply);
+  rpc PauseRun (PauseRunRequest) returns (RunProgressReply);
   //Виконання повністю завершено
   rpc CompleteRun (CompleteRunRequest) returns (RunProgressReply);
+}
+
+message ReportAiAttemptRequest {
+  string run_id = 1;
+  string message_id = 2;
+  int32 sequence = 3;
+  string provider = 4;
+  string model = 5;
+  string status = 6;
+  string failure_kind = 7;
+  string provider_request_id = 8;
+  int32 input_tokens = 9;
+  int32 output_tokens = 10;
+  string estimated_cost_usd = 11;
+  string actual_model = 12;
+  string idempotency_key = 13;
+  int32 route_priority = 14;
+  int64 latency_milliseconds = 15;
+  optional int32 cached_input_tokens = 16;
+  string usage_source = 17;
+  string cost_source = 18;
+  string finish_status = 19;
+  string fallback_reason = 20;
+  string partial_output = 21;
+  repeated ToolInvocationMessage tool_invocations = 22;
+  string checkpoint_json = 23;
+  string error_code = 24;
+  string operation = 25;
+  string generation_dispatched = 26;
+  string safe_exception_type = 27;
+}
+
+message ToolInvocationMessage {
+  string call_id = 1;
+  string tool_name = 2;
+  string arguments_json = 3;
+  bool succeeded = 4;
+  string output = 5;
+  string error = 6;
+  string status = 7;
+  string started_at = 8;
+  string completed_at = 9;
+  string idempotency_key = 10;
+}
+
+message PauseRunRequest {
+  string run_id = 1;
+  string message_id = 2;
+  string status = 3;
+  string reason = 4;
+}
+
+service AiProviderExecution {
+  rpc Execute (ExecuteAiProviderRequest) returns (ExecuteAiProviderReply);
+  rpc ResolveRoutes (ResolveAiProviderRoutesRequest) returns (ResolveAiProviderRoutesReply);
+  rpc InspectResumeSafety (InspectResumeSafetyRequest) returns (InspectResumeSafetyReply);
+}
+
+message InspectResumeSafetyRequest {
+  string owner_user_id = 1;
+  string provider = 2;
+  string idempotency_key = 3;
+}
+
+message InspectResumeSafetyReply {
+  bool allowed = 1;
+  string code = 2;
+}
+
+message ResolveAiProviderRoutesRequest {
+  string owner_user_id = 1;
+  string logical_routes_json = 2;
+}
+
+message ResolveAiProviderRoutesReply {
+  string resolved_routes_json = 1;
+  bool all_available = 2;
+}
+
+message ExecuteAiProviderRequest {
+  string owner_user_id = 1;
+  string connection_id = 2;
+  string model_id = 3;
+  string system_prompt = 4;
+  string input = 5;
+  repeated string allowed_tools = 6;
+  string scenario = 7;
+  string idempotency_key = 8;
+  string daily_cost_cap_usd = 9;
+  string monthly_cost_cap_usd = 10;
+  int32 max_requests_per_day = 11;
+  int32 max_requests_per_month = 12;
+  int32 max_input_tokens = 13;
+  int32 max_output_tokens = 14;
+  string run_cost_cap_usd = 15;
+  string route_cost_cap_usd = 16;
+  string expected_provider = 17;
+  repeated ToolInvocationMessage prior_tool_results = 18;
+  int32 max_tool_cycles = 19;
+  int32 checkpoint_tool_audit_budget_bytes = 20;
+}
+
+message ExecuteAiProviderReply {
+  bool succeeded = 1;
+  string output = 2;
+  string failure_kind = 3;
+  string error_code = 4;
+  string provider_request_id = 5;
+  int32 input_tokens = 6;
+  int32 output_tokens = 7;
+  string estimated_cost_usd = 8;
+  bool can_fallback = 9;
+  string actual_model = 10;
+  int64 latency_milliseconds = 11;
+  optional int32 cached_input_tokens = 12;
+  string usage_source = 13;
+  string cost_source = 14;
+  string finish_status = 15;
+  string partial_output = 16;
+  repeated ToolInvocationMessage tool_invocations = 17;
+  string operation = 18;
+  string generation_dispatched = 19;
+  string safe_exception_type = 20;
+  string operation_diagnostics_json = 21;
 }
 
 message BeginRunRequest {
