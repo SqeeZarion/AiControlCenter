@@ -33,6 +33,16 @@ public static class AgentRunEndpointExtensions
             Guid id, HttpContext context, AgentRunApplicationService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAsync(new GetAgentRunQuery(
                 id, GetUserId(context.User), context.User.IsInRole("Admin")), cancellationToken)));
+        runs.MapPost("/{id:guid}/resume", async (Guid id, ResumeAgentRunRequest request, HttpContext context,
+            AgentRunApplicationService service, CancellationToken cancellationToken) =>
+            Results.Accepted(value: await service.ResumeAsync(new ResumeAgentRunCommand(id,
+                GetUserId(context.User), context.User.IsInRole("Admin"), request.OperationId!.Value),
+                cancellationToken)))
+            .AddEndpointFilter<ValidationFilter<ResumeAgentRunRequest>>();
+        runs.MapPost("/{id:guid}/preflight", async (Guid id, HttpContext context,
+            AgentRunApplicationService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.PreflightAsync(new PreflightAgentRunQuery(id,
+                GetUserId(context.User), context.User.IsInRole("Admin")), cancellationToken)));
 
         endpoints.MapGet("/v1/operations/runs", async (
             int? recentLimit,

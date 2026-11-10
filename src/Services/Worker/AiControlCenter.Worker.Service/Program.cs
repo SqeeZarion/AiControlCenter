@@ -14,10 +14,17 @@ builder.Services.AddSingleton<IValidateOptions<WorkerExecutionOptions>, WorkerEx
 builder.Services.AddOptions<WorkerExecutionOptions>()
     .Bind(builder.Configuration.GetSection(WorkerExecutionOptions.SectionName))
     .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<IntegrationsExecutionOptions>, IntegrationsExecutionOptionsValidator>();
+builder.Services.AddOptions<IntegrationsExecutionOptions>()
+    .Bind(builder.Configuration.GetSection(IntegrationsExecutionOptions.SectionName)).ValidateOnStart();
 builder.Services.AddGrpcClient<RunProgress.RunProgressClient>(options =>
 {
     options.Address = new Uri(builder.Configuration["OrchestratorGrpc:Address"]
         ?? "http://orchestrator-api:8081");
+});
+builder.Services.AddGrpcClient<AiProviderExecution.AiProviderExecutionClient>(options =>
+{
+    options.Address = new Uri(builder.Configuration["IntegrationsGrpc:Address"] ?? "http://integrations-api:8081");
 });
 
 var app = builder.Build();

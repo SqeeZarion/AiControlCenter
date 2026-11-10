@@ -13,7 +13,7 @@ public sealed record CreateAgentRunRequest(Guid? AgentId, string? Input, TestRun
         Guid ownerUserId,
         string correlationId,
         string delegatedAuthorization) =>
-        new(AgentId!.Value, Input ?? string.Empty, ExpectedOutcome!.Value,
+        new(AgentId!.Value, Input ?? string.Empty, ExpectedOutcome,
             ownerUserId, correlationId, delegatedAuthorization);
 }
 
@@ -23,6 +23,13 @@ public sealed class CreateAgentRunRequestValidator : AbstractValidator<CreateAge
     {
         RuleFor(request => request.AgentId).NotNull().NotEqual(Guid.Empty);
         RuleFor(request => request.Input).NotNull();
-        RuleFor(request => request.ExpectedOutcome).NotNull();
     }
+}
+
+public sealed record ResumeAgentRunRequest(Guid? OperationId);
+
+public sealed class ResumeAgentRunRequestValidator : AbstractValidator<ResumeAgentRunRequest>
+{
+    public ResumeAgentRunRequestValidator() =>
+        RuleFor(request => request.OperationId).NotNull().NotEqual(Guid.Empty);
 }

@@ -17,3 +17,9 @@ public sealed class AgentRunAgentNotFoundException(Guid id)
 
 public sealed class AgentRunConflictException(string message)
     : AgentRunApplicationException(message);
+
+public sealed class AgentRunResumeBlockedException(string code, string message)
+    : AgentRunApplicationException(message)
+{
+    public string Code { get; } = code;
+}

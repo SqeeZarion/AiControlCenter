@@ -54,6 +54,61 @@ public sealed class RunProgressGrpcService(
             string.IsNullOrWhiteSpace(request.Error) ? null : request.Error), context.CancellationToken)));
     }
 
+    public override async Task<RunProgressReply> ReportAttempt(ReportAiAttemptRequest request, ServerCallContext context)
+    {
+        Authenticate(context);
+        var ids = ParseIds(request.RunId, request.MessageId);
+        var providerRequestId = ProviderCheckpointMetadataContract.CanonicalizeProviderRequestId(
+            request.ProviderRequestId);
+        var actualModel = ProviderCheckpointMetadataContract.CanonicalizeActualModel(request.ActualModel);
+        var provider = ProviderCheckpointMetadataContract.CanonicalizeProviderName(request.Provider) ?? string.Empty;
+        var model = ProviderCheckpointMetadataContract.CanonicalizeActualModel(request.Model) ?? string.Empty;
+        var status = ProviderCheckpointMetadataContract.CanonicalizeAttemptRecordStatus(request.Status) ?? string.Empty;
+        var failureKind = ProviderCheckpointMetadataContract.CanonicalizeFailureReason(request.FailureKind);
+        var idempotencyKey = ProviderCheckpointMetadataContract.CanonicalizeIdempotencyKey(request.IdempotencyKey)
+            ?? string.Empty;
+        var usageSource = ProviderCheckpointMetadataContract.CanonicalizeMetricSource(request.UsageSource)
+            ?? string.Empty;
+        var costSource = ProviderCheckpointMetadataContract.CanonicalizeMetricSource(request.CostSource)
+            ?? string.Empty;
+        var finishStatus = ProviderCheckpointMetadataContract.CanonicalizeFinishStatus(request.FinishStatus)
+            ?? string.Empty;
+        var fallbackReason = ProviderCheckpointMetadataContract.CanonicalizeFailureReason(request.FallbackReason);
+        var errorCode = ProviderCheckpointMetadataContract.CanonicalizeErrorCode(request.ErrorCode);
+        var operation = ProviderCheckpointMetadataContract.CanonicalizeOperation(request.Operation);
+        var generationDispatched = ProviderCheckpointMetadataContract.CanonicalizeGenerationDispatched(
+            request.GenerationDispatched);
+        var safeExceptionType = ProviderCheckpointMetadataContract.CanonicalizeSafeExceptionType(
+            request.SafeExceptionType);
+        decimal? cost = decimal.TryParse(request.EstimatedCostUsd, System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+        return Map(await ExecuteAsync(() => runs.ReportAttemptAsync(new ReportAiAttemptCommand(ids.RunId,
+            ids.MessageId, request.Sequence, provider, model, status,
+            failureKind,
+            providerRequestId,
+            request.InputTokens, request.OutputTokens, cost,
+            actualModel,
+            idempotencyKey, request.RoutePriority, request.LatencyMilliseconds,
+            request.HasCachedInputTokens ? request.CachedInputTokens : null,
+            usageSource, costSource,
+            finishStatus,
+            fallbackReason,
+            string.IsNullOrWhiteSpace(request.PartialOutput) ? null : request.PartialOutput,
+            string.IsNullOrWhiteSpace(request.CheckpointJson) ? null : request.CheckpointJson,
+            errorCode, operation, generationDispatched, safeExceptionType),
+            context.CancellationToken)));
+    }
+
+    public override async Task<RunProgressReply> PauseRun(PauseRunRequest request, ServerCallContext context)
+    {
+        Authenticate(context);
+        var ids = ParseIds(request.RunId, request.MessageId);
+        if (!Enum.TryParse<AgentRunStatus>(request.Status, out var status))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Valid paused status is required."));
+        return Map(await ExecuteAsync(() => runs.PauseAsync(new PauseAgentRunCommand(ids.RunId,
+            ids.MessageId, status, request.Reason), context.CancellationToken)));
+    }
+
     private static async Task<RunProgressResult> ExecuteAsync(Func<Task<RunProgressResult>> action)
     {
         try { return await action(); }

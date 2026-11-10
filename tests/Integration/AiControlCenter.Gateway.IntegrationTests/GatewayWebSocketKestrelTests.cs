@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Sockets;
 using System.Threading.Channels;
 using AiControlCenter.Contracts.V1;
 using AiControlCenter.Gateway;
@@ -214,6 +215,7 @@ public sealed class GatewayWebSocketKestrelTests
 
     private static WebApplicationFactory<GatewayMarker> CreateKestrelFactory(int port = 0)
     {
+        port = port == 0 ? ReserveAvailablePort() : port;
         var factory = new WebApplicationFactory<GatewayMarker>()
             .WithWebHostBuilder(builder => builder
                 .UseEnvironment("Production")
@@ -222,6 +224,13 @@ public sealed class GatewayWebSocketKestrelTests
                     configurator.AddConsumer<RunStatusChangedConsumer>())));
         factory.UseKestrel(port);
         return factory;
+    }
+
+    private static int ReserveAvailablePort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private static TaskCompletionSource NewCompletion() =>

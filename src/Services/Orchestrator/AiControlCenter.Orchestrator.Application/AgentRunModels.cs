@@ -5,7 +5,7 @@ namespace AiControlCenter.Orchestrator.Application;
 public sealed record CreateAgentRunCommand(
     Guid AgentId,
     string Input,
-    TestRunOutcome ExpectedOutcome,
+    TestRunOutcome? ExpectedOutcome,
     Guid OwnerUserId,
     string CorrelationId,
     string DelegatedAuthorization);
@@ -41,6 +41,22 @@ public sealed record CompleteAgentRunCommand(
     string? Result,
     string? Error);
 public sealed record FailAgentRunCommand(Guid RunId, Guid MessageId, string Error);
+public sealed record ReportAiAttemptCommand(Guid RunId, Guid MessageId, int Sequence, string Provider,
+    string Model, string Status, string? FailureKind, string? ProviderRequestId, int InputTokens,
+    int OutputTokens, decimal? EstimatedCostUsd, string? ActualModel, string IdempotencyKey,
+    int RoutePriority, long LatencyMilliseconds, int? CachedInputTokens, string UsageSource,
+    string CostSource, string FinishStatus, string? FallbackReason, string? PartialOutput,
+    string? CheckpointJson, string? ErrorCode = null, string? Operation = null,
+    string? GenerationDispatched = null, string? SafeExceptionType = null);
+public sealed record PauseAgentRunCommand(Guid RunId, Guid MessageId, AgentRunStatus Status, string Reason);
+public sealed record ResumeAgentRunCommand(
+    Guid RunId,
+    Guid RequestUserId,
+    bool CanManageAll,
+    Guid OperationId);
+public sealed record PreflightAgentRunQuery(Guid RunId, Guid RequestUserId, bool CanManageAll);
+public sealed record AgentRunPreflightDto(bool Available, string Code);
+public sealed record AgentRunResumeSafetyDto(bool Allowed, string Code);
 
 public sealed record RunStepDto(
     Guid Id,
@@ -51,6 +67,13 @@ public sealed record RunStepDto(
     DateTimeOffset StartedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? CompletedAt);
+public sealed record AiProviderAttemptDto(Guid Id, int Sequence, string Provider, string Model, string Status,
+    string? FailureKind, string? ProviderRequestId, int InputTokens, int OutputTokens,
+    decimal? EstimatedCostUsd, string? ActualModel, string IdempotencyKey, int RoutePriority,
+    long LatencyMilliseconds, int? CachedInputTokens, int TotalTokens, string UsageSource,
+    string CostSource, string FinishStatus, string? FallbackReason, string? PartialOutput,
+    DateTimeOffset StartedAt, DateTimeOffset CompletedAt, string? ErrorCode,
+    string? Operation, string? GenerationDispatched, string? SafeExceptionType);
 
 public sealed record AgentRunDto(
     Guid Id,
@@ -74,7 +97,15 @@ public sealed record AgentRunDto(
     DateTimeOffset? CompletedAt,
     string? Result,
     string? Error,
-    IReadOnlyCollection<RunStepDto> Steps);
+    IReadOnlyCollection<RunStepDto> Steps,
+    IReadOnlyCollection<AiProviderAttemptDto> Attempts,
+    string? ModelRoutesJson,
+    int MaxAttempts,
+    decimal? MaxEstimatedCostUsd,
+    string? CheckpointJson,
+    int CheckpointVersion,
+    string? CheckpointHash,
+    DateTimeOffset? CheckpointUpdatedAt);
 
 public sealed record AgentRunListDto(
     IReadOnlyCollection<AgentRunDto> Items,

@@ -1,9 +1,12 @@
 using System.Text.Json;
 using AiControlCenter.ControlPlane.Api;
+using AiControlCenter.Grpc.Contracts.V1;
 using AiControlCenter.Identity.Api;
 using AiControlCenter.Integrations.Api;
 using AiControlCenter.Orchestrator.Api;
 using AiControlCenter.Security;
+using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -124,7 +127,8 @@ public sealed class ServiceHostHealthTests
                 .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath)
                 .UseSetting("JwtSigning:PrivateKeyPath", TestJwtTokenFactory.PrivateKeyPath)
                 .UseSetting("IdentityBootstrap:Disabled", "true")
-                .UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), "aicontrolcenter-dp-tests")));
+                .UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), "aicontrolcenter-dp-tests"))
+                .UseSetting("InternalGrpc:ApiKey", "integration-test-internal-grpc-key-32-chars"));
 
         using var client = factory.CreateClient();
         using var response = await client.GetAsync("/health/live");
@@ -137,12 +141,42 @@ public sealed class ServiceHostHealthTests
         await using var factory = new WebApplicationFactory<IntegrationsApiMarker>()
             .WithWebHostBuilder(builder => builder
                 .UseSetting("ConnectionStrings:IntegrationsDatabase", "Host=127.0.0.1;Port=1;Database=foundation;Username=test;Password=test;Timeout=1")
-                .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath));
+                .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath)
+                .UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), "aicontrolcenter-integrations-dp-tests"))
+                .UseSetting("InternalGrpc:ApiKey", "integration-test-internal-grpc-key-32-chars"));
         using var client = factory.CreateClient();
 
         using var response = await client.GetAsync("/service-info");
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task IntegrationsInternalGrpcBypassesBearerFallbackButRequiresWorkerApiKey()
+    {
+        const string workerKey = "integration-test-internal-grpc-key-32-chars";
+        await using var factory = new WebApplicationFactory<IntegrationsApiMarker>()
+            .WithWebHostBuilder(builder => builder
+                .UseSetting("ConnectionStrings:IntegrationsDatabase", "Host=127.0.0.1;Port=1;Database=foundation;Username=test;Password=test;Timeout=1")
+                .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath)
+                .UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), "aicontrolcenter-integrations-dp-tests"))
+                .UseSetting("InternalGrpc:ApiKey", workerKey));
+        using var channel = GrpcChannel.ForAddress(
+            "http://localhost",
+            new GrpcChannelOptions { HttpHandler = factory.Server.CreateHandler() });
+        var client = new AiProviderExecution.AiProviderExecutionClient(channel);
+        var request = new ExecuteAiProviderRequest();
+
+        var rejected = await Assert.ThrowsAsync<RpcException>(() => client.ExecuteAsync(
+            request,
+            new Metadata { { "x-worker-api-key", "wrong-worker-key-at-least-32-characters" } }).ResponseAsync);
+        Assert.Equal(StatusCode.Unauthenticated, rejected.StatusCode);
+        Assert.Equal("Worker authentication failed.", rejected.Status.Detail);
+
+        var acceptedAuthentication = await Assert.ThrowsAsync<RpcException>(() => client.ExecuteAsync(
+            request,
+            new Metadata { { "x-worker-api-key", workerKey } }).ResponseAsync);
+        Assert.Equal(StatusCode.InvalidArgument, acceptedAuthentication.StatusCode);
     }
 
     private static WebApplicationFactory<ControlPlaneApiMarker> CreateControlPlaneFactory(string publicKeyPath) =>
