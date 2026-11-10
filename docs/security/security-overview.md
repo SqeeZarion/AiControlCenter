@@ -261,15 +261,16 @@ memory `AccessTokenStore`.
 
 ## Межі відповідальності
 
-| Компонент                  | Відповідальність                                                         |
-| -------------------------- | ------------------------------------------------------------------------ |
-| Identity                   | Users, passwords, roles, access JWT issuance і refresh sessions          |
-| `AiControlCenter.Security` | Єдині JWT validation rules, claims/policy names і authorization defaults |
-| Gateway                    | Public entry point, перша validation, YARP і SignalR                     |
-| Internal API               | Повторна validation та policies власного endpoint                        |
-| Angular                    | Memory-only access token, interceptor, guards і controlled refresh       |
-| PostgreSQL                 | Users, roles, password hashes і refresh-token hashes                     |
-| Data Protection            | Захист antiforgery token material і пов'язаних cookie mechanisms         |
+| Компонент                    | Відповідальність                                                                                                                  |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Identity                     | Users, passwords, roles, access JWT issuance і refresh sessions                                                                   |
+| `AiControlCenter.Security`   | Єдині JWT validation rules, claims/policy names і authorization defaults                                                          |
+| Gateway                      | Public entry point, перша validation, YARP і SignalR                                                                              |
+| Internal API                 | Повторна validation та policies власного endpoint                                                                                 |
+| Angular                      | Memory-only access token, interceptor, guards і controlled refresh                                                                |
+| PostgreSQL                   | Users, roles, password hashes і refresh-token hashes                                                                              |
+| Data Protection              | Захист antiforgery token material і пов'язаних cookie mechanisms                                                                  |
+| Integrations Data Protection | Окремий persistent key ring шифрує user-scoped OAuth/API credentials. Purpose прив'язаний до типу даних, provider, owner, connection/flow і version; raw values не виходять у DTO, logs або messages |
 
 Building Block не управляє refresh cookie, не перевіряє password, не читає
 Identity database, не відкликає access JWT і не замінює повноцінний OIDC

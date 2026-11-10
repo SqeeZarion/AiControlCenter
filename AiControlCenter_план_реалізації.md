@@ -538,6 +538,8 @@ Live-екран використовує тільки фактичні health/st
 
 **Статус: реалізовано та перевірено.**
 
+Фактична реалізація використовує глобальні логічні routes у `AgentDefinition`: connection резолвиться сервером для власника конкретного Run, а trusted binding з persisted provider/paid classification зберігається в immutable snapshot. Paid generation починається лише після атомарної PostgreSQL reservation із conservative worst-case cost; completed cost reconciles reservation, а ambiguous outcome залишається зарезервованим. Tool calls/results проходять typed transport і потрапляють до versioned/hash-verified checkpoint, тому Resume не повторює вже підтверджений tool.
+
 - реалізувати AgentDefinition у Control Plane Service;
 - реалізувати AgentRun і RunStep в Orchestrator Service;
 - створити gRPC-контракти між Control Plane, Orchestrator та Worker;
@@ -580,6 +582,8 @@ Live-екран використовує тільки фактичні health/st
 
 ### Етап 5. AI-провайдери та інструменти агента
 
+**Статус: реалізовано та перевірено.**
+
 - створити універсальний інтерфейс AI-провайдера;
 - підключити GitHub Copilot SDK як провайдер, що може використовувати доступні GitHub AI Credits авторизованого користувача;
 - підключити OpenAI Responses API як незалежний основний або резервний провайдер;
@@ -595,8 +599,11 @@ Live-екран використовує тільки фактичні health/st
 - якщо Copilot SDK не повертає точні token usage або AI Credits, зберігати локальну оцінку з ознакою `Estimated`, не видаючи її за provider-reported значення;
 - реалізувати `AiExecutionAttempt` або еквівалентний журнал спроб із correlation/idempotency key, щоб timeout чи невизначений результат не спричинили подвійне виконання та списання credits у двох провайдерів;
 - додати денні й місячні бюджети, ліміти запуску та можливість повністю заборонити платний fallback;
+- рахувати request caps за фактичними outbound provider requests: catalog, initial generation і кожний наступний model turn; резервувати кожний slot атомарно в PostgreSQL, а після завершення замінювати reserved count на server-side actual count;
 - зберігати GitHub OAuth/API credentials, OpenAI API key і xAI API key лише на сервері в захищеному сховищі та ніколи не повертати їх на frontend;
 - для кількох користувачів виконувати Copilot-запити від імені того користувача, який явно авторизував GitHub, а не непомітно витрачати особисту студентську квоту власника системи;
+- використовувати GitHub OAuth як основний спосіб підключення Copilot і дозволити персональний write-only fine-grained PAT із permission `Copilot Requests` як резервний спосіб; classic PAT не приймати, а token Copilot CLI не копіювати в систему;
+- для особистого live E2E додати окремий вимкнений за замовчуванням `GitHubCopilotLocalCli`: лише `Development`, owner-scoped, через authenticated internal Docker sidecar з власним `COPILOT_HOME`; не використовувати його як прихований multi-user fallback і не зберігати CLI token у БД або `.env`;
 - додати у профіль користувача підключення/відключення GitHub OAuth, write-only введення або заміну OpenAI/xAI API keys, перевірку credentials, masked fingerprint, available models, last sync, usage, витрати й provider-reported/estimated/unavailable balance або quota;
 - не реалізовувати внутрішнє поповнення AiControlCenter: користувач фінансує OpenAI/xAI у кабінеті провайдера, а після поповнення запускає refresh/sync і відновлює призупинений Run із checkpoint;
 - додати обмеження доступу до інструментів.
@@ -608,6 +615,7 @@ Live-екран використовує тільки фактичні health/st
 - не вважати можливим безшовне перенесення вже активної генерації між провайдерами: якщо stream перервано, зберегти partial output, usage, request/correlation IDs і результат усіх уже виконаних tools, завершити поточний `AiExecutionAttempt` та створити нову спробу того самого логічного кроку на резервній моделі;
 - передавати резервній моделі початкову задачу, підтверджений контекст, checkpoint, tool results і позначений partial output; не видавати дві provider attempts за один безперервний виклик;
 - не робити blind retry або fallback після невизначеного timeout, доки не встановлено результат першої спроби настільки, наскільки це дозволяє API провайдера;
+- transport failure або timeout після dispatch платного generation POST вважати `AmbiguousTimeout`: не звільняти reservation, не виконувати автоматичний paid fallback і зберігати доступний provider request/correlation ID; безпечна catalog GET failure залишається transient;
 - якщо дозволеного доступного маршруту немає, переводити Run у `PausedProviderUnavailable` або `PausedInsufficientFunds`, зберігати виконані кроки та повідомляти користувача через UI/SignalR;
 - після зовнішнього поповнення або відновлення quota повторно синхронізувати provider connection і дозволити `Resume` із останнього безпечного checkpoint, а не починати весь Run заново;
 - обмежити кількість переходів і заборонити циклічний routing, щоб агент не міг нескінченно перемикатися між моделями або створювати неконтрольовані витрати;
@@ -622,6 +630,8 @@ Live-екран використовує тільки фактичні health/st
 - у Development і Test платні провайдери за замовчуванням мають статус `NotConfigured`, нульовий бюджет і вимкнений автоматичний fallback;
 - відсутність OpenAI/xAI ключів не повинна ламати запуск системи, якщо ці провайдери вимкнені; явне ввімкнення без ключа повинно завершуватися типізованою startup/configuration validation failure;
 - тести не можуть виконувати неконтрольовані зовнішні платні запити; secrets, реальні токени й персональні Copilot credentials не потрапляють у Git, fixtures, logs або test output;
+- tool audit має спільний aggregate UTF-8 budget, а повний checkpoint — межу 65,536 UTF-8 bytes; overflow виявляється до небезпечного tool execution або до `ReportAttempt`, і Run не залишається у `Running`;
+- production-composition PostgreSQL tests перевіряють concurrent request cap, фактичну кількість provider calls, pending/ambiguous accounting та reconciliation; controlled HTTP/Worker tests перевіряють ambiguous POST, заборону fallback, malformed routes і oversized checkpoint;
 - за фактичними Copilot-запусками система накопичує usage-метадані та показує орієнтовну ціну того самого навантаження через OpenAI й Grok;
 - live smoke tests OpenAI/xAI, перевірка реального provider-reported billing і оцінка якості конкретних платних моделей свідомо відкладаються до появи бюджету та фіксуються як verification gap, а не оголошуються успішно пройденими;
 - після появи бюджету достатньо окремого вузького smoke pass із жорстким spending cap; переробляти архітектуру або бізнес-логіку для цього не потрібно.

@@ -1,6 +1,6 @@
 # Orchestrator
 
-Orchestrator володіє `AgentRun`/`RunStep`, переходами стану та PostgreSQL transactional outbox. Він перевіряє runnable Agent snapshot через ControlPlane gRPC, асинхронно ставить Test execution у RabbitMQ і приймає progress Worker через окремо authenticated gRPC.
+Orchestrator володіє `AgentRun`/`RunStep`, trusted immutable AI snapshot, `AiProviderAttempt`, versioned/hash-verified checkpoint, pause/resume transitions та PostgreSQL transactional outbox. Він перевіряє runnable Agent snapshot через ControlPlane gRPC, резолвить owner-scoped provider routes через authenticated Integrations gRPC, асинхронно ставить Test/AI execution у RabbitMQ і приймає progress Worker через окремо authenticated gRPC.
 
 ```mermaid
 flowchart LR
@@ -21,3 +21,5 @@ flowchart LR
 [Комунікація](../../../docs/architecture/communication.md) · [Межі сервісів](../../../docs/architecture/service-boundaries.md)
 
 [Agents, Runs і Worker](../../../docs/architecture/agents-runs-worker.md)
+
+[AI providers, attempts і checkpoint/resume](../../../docs/architecture/ai-providers.md)
