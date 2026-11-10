@@ -6,6 +6,7 @@ namespace AiControlCenter.ControlPlane.Application;
 public sealed class AgentDefinitionApplicationService(
     IAgentDefinitionRepository agents,
     IControlPlaneUnitOfWork unitOfWork,
+    IAgentModelRouteValidator modelRouteValidator,
     TimeProvider timeProvider,
     IValidator<ListAgentDefinitionsQuery> listValidator,
     IValidator<CreateAgentDefinitionCommand> createValidator,
@@ -31,16 +32,21 @@ public sealed class AgentDefinitionApplicationService(
         ToDto(await RequireAsync(id, false, cancellationToken));
 
     public async Task<AgentDefinitionDto> CreateAsync(
+        Guid ownerUserId,
         CreateAgentDefinitionCommand command,
         CancellationToken cancellationToken)
     {
         await createValidator.ValidateAndThrowAsync(command, cancellationToken);
+        await ValidateModelRoutesAsync(ownerUserId, command.ExecutionType,
+            command.ModelRoutesJson, cancellationToken);
         await EnsureDirectionExistsAsync(command.DirectionId, cancellationToken);
         var code = AgentDefinition.NormalizeCode(command.Code);
         await EnsureCodeAvailableAsync(code, null, cancellationToken);
         var agent = AgentDefinition.Create(
             Guid.NewGuid(), command.DirectionId, command.Name, code, command.Description,
-            command.Status, command.ExecutionType, timeProvider.GetUtcNow());
+            command.Status, command.ExecutionType, timeProvider.GetUtcNow(), command.SystemPrompt,
+            command.ModelRoutesJson, command.ToolPolicyJson, command.MaxInputTokens,
+            command.MaxOutputTokens, command.MaxEstimatedCostUsd, command.MaxAttempts);
         agents.Add(agent);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToDto(agent);
@@ -48,16 +54,21 @@ public sealed class AgentDefinitionApplicationService(
 
     public async Task<AgentDefinitionDto> UpdateAsync(
         Guid id,
+        Guid ownerUserId,
         UpdateAgentDefinitionCommand command,
         CancellationToken cancellationToken)
     {
         await updateValidator.ValidateAndThrowAsync(command, cancellationToken);
+        await ValidateModelRoutesAsync(ownerUserId, command.ExecutionType,
+            command.ModelRoutesJson, cancellationToken);
         var agent = await RequireCurrentAsync(id, command.Version, cancellationToken);
         await EnsureDirectionExistsAsync(command.DirectionId, cancellationToken);
         var code = AgentDefinition.NormalizeCode(command.Code);
         await EnsureCodeAvailableAsync(code, id, cancellationToken);
         agent.Update(command.DirectionId, command.Name, code, command.Description,
-            command.Status, command.ExecutionType, timeProvider.GetUtcNow());
+            command.Status, command.ExecutionType, timeProvider.GetUtcNow(), command.SystemPrompt,
+            command.ModelRoutesJson, command.ToolPolicyJson, command.MaxInputTokens,
+            command.MaxOutputTokens, command.MaxEstimatedCostUsd, command.MaxAttempts);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToDto(agent);
     }
@@ -138,7 +149,26 @@ public sealed class AgentDefinitionApplicationService(
             throw new AgentDefinitionConflictException("An agent definition with this code already exists.");
     }
 
+    private async Task ValidateModelRoutesAsync(
+        Guid ownerUserId,
+        AgentExecutionType executionType,
+        string? modelRoutesJson,
+        CancellationToken cancellationToken)
+    {
+        if (executionType != AgentExecutionType.Ai)
+            return;
+        if (ownerUserId == Guid.Empty)
+            throw new AgentModelRouteValidationException(
+                "AgentRouteOwnerMissing", "modelRoutesJson", "Не вдалося визначити власника AI-маршруту.");
+        await modelRouteValidator.ValidateAsync(
+            ownerUserId,
+            modelRoutesJson ?? string.Empty,
+            cancellationToken);
+    }
+
     private static AgentDefinitionDto ToDto(AgentDefinition agent) => new(
         agent.Id, agent.DirectionId, agent.Name, agent.Code, agent.Description, agent.Status,
-        agent.ExecutionType, agent.CreatedAt, agent.UpdatedAt, agent.ArchivedAt, agent.Version);
+        agent.ExecutionType, agent.CreatedAt, agent.UpdatedAt, agent.ArchivedAt, agent.Version,
+        agent.SystemPrompt, agent.ModelRoutesJson, agent.ToolPolicyJson, agent.MaxInputTokens,
+        agent.MaxOutputTokens, agent.MaxEstimatedCostUsd, agent.MaxAttempts);
 }

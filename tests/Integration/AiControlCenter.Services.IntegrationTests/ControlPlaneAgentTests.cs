@@ -13,6 +13,8 @@ using Grpc.Net.Client;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using ProductionAgentCatalogClient = AiControlCenter.Orchestrator.Api.Grpc.AgentCatalogClient;
@@ -40,7 +42,12 @@ public sealed class ControlPlaneAgentTests : IAsyncLifetime
         factory = new WebApplicationFactory<ControlPlaneApiMarker>().WithWebHostBuilder(builder => builder
             .UseEnvironment("Development")
             .UseSetting("ConnectionStrings:ControlPlaneDatabase", postgres.GetConnectionString())
-            .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath));
+            .UseSetting("Authentication:PublicKeyPath", TestJwtTokenFactory.PublicKeyPath)
+            .ConfigureServices(services =>
+            {
+                services.RemoveAll<IAgentModelRouteValidator>();
+                services.AddSingleton<IAgentModelRouteValidator, AcceptingModelRouteValidator>();
+            }));
     }
 
     public async Task DisposeAsync()
@@ -123,6 +130,67 @@ public sealed class ControlPlaneAgentTests : IAsyncLifetime
 
         Assert.NotNull(page);
         Assert.Equal(expectedCode, Assert.Single(page.Items).Code);
+    }
+
+    [Fact]
+    public async Task AiExecutionTypeSurvivesCreateEditAndListRoundTrip()
+    {
+        await ClearAsync();
+        using var admin = CreateClient("Admin");
+        using var developer = CreateClient("Developer");
+        var direction = await CreateDirectionAsync(admin, "ai-round-trip-direction");
+        var route = """
+            [{"provider":"LocalCopilotCli","connectionId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","modelId":"Auto","priority":1,"enabled":true,"maxAttempts":1,"timeoutSeconds":60,"paidExecutionAllowed":false,"paidFallbackAllowed":false}]
+            """;
+
+        using var createdResponse = await developer.PostAsJsonAsync("/v1/agents", new
+        {
+            directionId = direction.Id,
+            name = "AI round trip",
+            code = "ai-round-trip",
+            description = "before edit",
+            status = "Active",
+            executionType = "Ai",
+            systemPrompt = "Use the persisted AI route.",
+            modelRoutesJson = route,
+            toolPolicyJson = "[]",
+            maxInputTokens = 500,
+            maxOutputTokens = 250,
+            maxEstimatedCostUsd = 1m,
+            maxAttempts = 1,
+        });
+        createdResponse.EnsureSuccessStatusCode();
+        var created = (await createdResponse.Content.ReadFromJsonAsync<AgentDefinitionDto>(WebJson))!;
+        Assert.Equal(AgentExecutionType.Ai, created.ExecutionType);
+
+        using var updatedResponse = await developer.PutAsJsonAsync($"/v1/agents/{created.Id}", new
+        {
+            directionId = direction.Id,
+            name = created.Name,
+            code = created.Code,
+            description = "after edit",
+            status = "Active",
+            executionType = "Ai",
+            version = created.Version,
+            systemPrompt = created.SystemPrompt,
+            modelRoutesJson = created.ModelRoutesJson,
+            toolPolicyJson = created.ToolPolicyJson,
+            maxInputTokens = created.MaxInputTokens,
+            maxOutputTokens = created.MaxOutputTokens,
+            maxEstimatedCostUsd = created.MaxEstimatedCostUsd,
+            maxAttempts = created.MaxAttempts,
+        });
+        updatedResponse.EnsureSuccessStatusCode();
+
+        var page = await developer.GetFromJsonAsync<AgentDefinitionListDto>(
+            "/v1/agents?search=ai-round-trip",
+            WebJson);
+        var listed = Assert.Single(page!.Items);
+        Assert.Equal(AgentExecutionType.Ai, listed.ExecutionType);
+        Assert.Equal("after edit", listed.Description);
+        using var expectedRoutes = JsonDocument.Parse(route);
+        using var actualRoutes = JsonDocument.Parse(listed.ModelRoutesJson!);
+        Assert.True(JsonElement.DeepEquals(expectedRoutes.RootElement, actualRoutes.RootElement));
     }
 
     [Fact]
@@ -244,5 +312,11 @@ public sealed class ControlPlaneAgentTests : IAsyncLifetime
         await using var connection = new NpgsqlConnection(postgres.GetConnectionString()); await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection); await using var reader = await command.ExecuteReaderAsync();
         var result = new List<string>(); while (await reader.ReadAsync()) result.Add(reader.GetString(0)); return result.ToArray();
+    }
+
+    private sealed class AcceptingModelRouteValidator : IAgentModelRouteValidator
+    {
+        public Task ValidateAsync(Guid ownerUserId, string modelRoutesJson, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

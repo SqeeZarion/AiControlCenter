@@ -23,7 +23,14 @@ public sealed record CreateAgentDefinitionCommand(
     string Code,
     string? Description,
     AgentDefinitionStatus Status,
-    AgentExecutionType ExecutionType);
+    AgentExecutionType ExecutionType,
+    string? SystemPrompt = null,
+    string? ModelRoutesJson = null,
+    string? ToolPolicyJson = null,
+    int? MaxInputTokens = null,
+    int? MaxOutputTokens = null,
+    decimal? MaxEstimatedCostUsd = null,
+    int MaxAttempts = 1);
 
 //Команда змінює всі основні параметри агента:
 public sealed record UpdateAgentDefinitionCommand(
@@ -33,7 +40,14 @@ public sealed record UpdateAgentDefinitionCommand(
     string? Description,
     AgentDefinitionStatus Status,
     AgentExecutionType ExecutionType,
-    uint Version);
+    uint Version,
+    string? SystemPrompt = null,
+    string? ModelRoutesJson = null,
+    string? ToolPolicyJson = null,
+    int? MaxInputTokens = null,
+    int? MaxOutputTokens = null,
+    decimal? MaxEstimatedCostUsd = null,
+    int MaxAttempts = 1);
 
 //Активує або деактивує агента.
 public sealed record ChangeAgentDefinitionStatusCommand(AgentDefinitionStatus Status, uint Version);
@@ -54,7 +68,14 @@ public sealed record AgentDefinitionDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt,
-    uint Version)
+    uint Version,
+    string? SystemPrompt,
+    string? ModelRoutesJson,
+    string? ToolPolicyJson,
+    int? MaxInputTokens,
+    int? MaxOutputTokens,
+    decimal? MaxEstimatedCostUsd,
+    int MaxAttempts)
 {
     public bool IsArchived => ArchivedAt is not null;
 }

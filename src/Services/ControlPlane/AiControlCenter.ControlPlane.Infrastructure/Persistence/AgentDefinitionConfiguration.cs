@@ -11,7 +11,12 @@ internal sealed class AgentDefinitionConfiguration : IEntityTypeConfiguration<Ag
         builder.ToTable("agent_definitions", table =>
         {
             table.HasCheckConstraint("ck_agent_definitions_status", "status IN ('Inactive', 'Active')");
-            table.HasCheckConstraint("ck_agent_definitions_execution_type", "execution_type = 'Test'");
+            table.HasCheckConstraint("ck_agent_definitions_execution_type", "execution_type IN ('Test','Ai')");
+            table.HasCheckConstraint("ck_agent_definitions_ai_configuration",
+                "(execution_type = 'Test' AND system_prompt IS NULL AND model_routes_json IS NULL) OR "
+                + "(execution_type = 'Ai' AND system_prompt IS NOT NULL AND model_routes_json IS NOT NULL "
+                + "AND max_input_tokens > 0 AND max_output_tokens > 0 AND max_estimated_cost_usd > 0 "
+                + "AND max_attempts BETWEEN 1 AND 10)");
             table.HasCheckConstraint(
                 "ck_agent_definitions_code_format",
                 $"char_length(code) BETWEEN 2 AND {AgentDefinition.CodeMaxLength} "
@@ -41,6 +46,13 @@ internal sealed class AgentDefinitionConfiguration : IEntityTypeConfiguration<Ag
             .HasConversion<string>().HasMaxLength(16);
         builder.Property(agent => agent.ExecutionType).HasColumnName("execution_type")
             .HasConversion<string>().HasMaxLength(16);
+        builder.Property(agent => agent.SystemPrompt).HasColumnName("system_prompt").HasMaxLength(AgentDefinition.SystemPromptMaxLength);
+        builder.Property(agent => agent.ModelRoutesJson).HasColumnName("model_routes_json").HasColumnType("jsonb");
+        builder.Property(agent => agent.ToolPolicyJson).HasColumnName("tool_policy_json").HasColumnType("jsonb");
+        builder.Property(agent => agent.MaxInputTokens).HasColumnName("max_input_tokens");
+        builder.Property(agent => agent.MaxOutputTokens).HasColumnName("max_output_tokens");
+        builder.Property(agent => agent.MaxEstimatedCostUsd).HasColumnName("max_estimated_cost_usd").HasPrecision(18, 8);
+        builder.Property(agent => agent.MaxAttempts).HasColumnName("max_attempts");
         builder.Property(agent => agent.CreatedAt).HasColumnName("created_at");
         builder.Property(agent => agent.UpdatedAt).HasColumnName("updated_at");
         builder.Property(agent => agent.ArchivedAt).HasColumnName("archived_at");

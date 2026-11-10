@@ -82,7 +82,14 @@ internal sealed class AgentDefinitionRepository(ControlPlaneDbContext dbContext)
                 candidate.Direction.Id,
                 candidate.Direction.Name,
                 candidate.Direction.Code,
-                candidate.Direction.Version));
+                candidate.Direction.Version,
+                candidate.Agent.SystemPrompt,
+                candidate.Agent.ModelRoutesJson,
+                candidate.Agent.ToolPolicyJson,
+                candidate.Agent.MaxInputTokens,
+                candidate.Agent.MaxOutputTokens,
+                candidate.Agent.MaxEstimatedCostUsd,
+                candidate.Agent.MaxAttempts));
     }
 
     public void Add(AgentDefinition agent) => dbContext.AgentDefinitions.Add(agent);

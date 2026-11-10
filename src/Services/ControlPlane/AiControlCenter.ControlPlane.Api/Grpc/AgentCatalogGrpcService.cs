@@ -30,6 +30,13 @@ public sealed class AgentCatalogGrpcService(AgentDefinitionApplicationService ag
                 DirectionName = agent.DirectionName,
                 DirectionCode = agent.DirectionCode,
                 DirectionVersion = agent.DirectionVersion,
+                SystemPrompt = agent.SystemPrompt ?? string.Empty,
+                ModelRoutesJson = agent.ModelRoutesJson ?? string.Empty,
+                ToolPolicyJson = agent.ToolPolicyJson ?? string.Empty,
+                MaxInputTokens = agent.MaxInputTokens ?? 0,
+                MaxOutputTokens = agent.MaxOutputTokens ?? 0,
+                MaxEstimatedCostUsd = agent.MaxEstimatedCostUsd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                MaxAttempts = agent.MaxAttempts,
             };
         }
         catch (AgentNotRunnableException)

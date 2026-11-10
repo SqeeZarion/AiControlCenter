@@ -27,6 +27,14 @@ public interface IAgentDefinitionRepository
 
 public sealed record AgentDefinitionPage(IReadOnlyCollection<AgentDefinition> Items, int TotalCount);
 
+public interface IAgentModelRouteValidator
+{
+    Task ValidateAsync(
+        Guid ownerUserId,
+        string logicalRoutesJson,
+        CancellationToken cancellationToken);
+}
+
 public sealed record RunnableAgentSnapshot(
     Guid AgentId,
     string AgentName,
@@ -37,7 +45,14 @@ public sealed record RunnableAgentSnapshot(
     Guid DirectionId,
     string DirectionName,
     string DirectionCode,
-    uint DirectionVersion);
+    uint DirectionVersion,
+    string? SystemPrompt,
+    string? ModelRoutesJson,
+    string? ToolPolicyJson,
+    int? MaxInputTokens,
+    int? MaxOutputTokens,
+    decimal? MaxEstimatedCostUsd,
+    int MaxAttempts);
 
 public enum RunnableAgentLookupStatus
 {

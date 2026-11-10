@@ -14,6 +14,7 @@ public enum AgentDefinitionStatus
 public enum AgentExecutionType
 {
     Test = 0,
+    Ai = 1,
 }
 
 //обмеження заповнення полів
@@ -22,6 +23,8 @@ public sealed class AgentDefinition
     public const int NameMaxLength = 100;
     public const int CodeMaxLength = 64;
     public const int DescriptionMaxLength = 1000;
+    public const int SystemPromptMaxLength = 16_000;
+    public const int ConfigurationJsonMaxLength = 32_000;
 
     private AgentDefinition()
     {
@@ -35,7 +38,14 @@ public sealed class AgentDefinition
         string? description,
         AgentDefinitionStatus status,
         AgentExecutionType executionType,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? systemPrompt = null,
+        string? modelRoutesJson = null,
+        string? toolPolicyJson = null,
+        int? maxInputTokens = null,
+        int? maxOutputTokens = null,
+        decimal? maxEstimatedCostUsd = null,
+        int maxAttempts = 1)
     {
         Id = RequireId(id, nameof(id));
         DirectionId = RequireId(directionId, nameof(directionId));
@@ -44,6 +54,8 @@ public sealed class AgentDefinition
         Description = NormalizeDescription(description);
         Status = ValidateStatus(status);
         ExecutionType = ValidateExecutionType(executionType);
+        ApplyAiConfiguration(executionType, systemPrompt, modelRoutesJson, toolPolicyJson,
+            maxInputTokens, maxOutputTokens, maxEstimatedCostUsd, maxAttempts);
         CreatedAt = now.ToUniversalTime();
         UpdatedAt = CreatedAt;
     }
@@ -56,6 +68,13 @@ public sealed class AgentDefinition
     public AgentDefinitionStatus Status { get; private set; }
     //Спосіб виконання
     public AgentExecutionType ExecutionType { get; private set; }
+    public string? SystemPrompt { get; private set; }
+    public string? ModelRoutesJson { get; private set; }
+    public string? ToolPolicyJson { get; private set; }
+    public int? MaxInputTokens { get; private set; }
+    public int? MaxOutputTokens { get; private set; }
+    public decimal? MaxEstimatedCostUsd { get; private set; }
+    public int MaxAttempts { get; private set; } = 1;
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public DateTimeOffset? ArchivedAt { get; private set; }
@@ -71,8 +90,16 @@ public sealed class AgentDefinition
         string? description,
         AgentDefinitionStatus status,
         AgentExecutionType executionType,
-        DateTimeOffset now) =>
-        new(id, directionId, name, code, description, status, executionType, now);
+        DateTimeOffset now,
+        string? systemPrompt = null,
+        string? modelRoutesJson = null,
+        string? toolPolicyJson = null,
+        int? maxInputTokens = null,
+        int? maxOutputTokens = null,
+        decimal? maxEstimatedCostUsd = null,
+        int maxAttempts = 1) =>
+        new(id, directionId, name, code, description, status, executionType, now, systemPrompt,
+            modelRoutesJson, toolPolicyJson, maxInputTokens, maxOutputTokens, maxEstimatedCostUsd, maxAttempts);
 
     //оновлення агента
     public void Update(
@@ -82,7 +109,14 @@ public sealed class AgentDefinition
         string? description,
         AgentDefinitionStatus status,
         AgentExecutionType executionType,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? systemPrompt = null,
+        string? modelRoutesJson = null,
+        string? toolPolicyJson = null,
+        int? maxInputTokens = null,
+        int? maxOutputTokens = null,
+        decimal? maxEstimatedCostUsd = null,
+        int maxAttempts = 1)
     {
         EnsureNotArchived();
         var validatedDirectionId = RequireId(directionId, nameof(directionId));
@@ -98,6 +132,8 @@ public sealed class AgentDefinition
         Description = normalizedDescription;
         Status = validatedStatus;
         ExecutionType = validatedExecutionType;
+        ApplyAiConfiguration(validatedExecutionType, systemPrompt, modelRoutesJson, toolPolicyJson,
+            maxInputTokens, maxOutputTokens, maxEstimatedCostUsd, maxAttempts);
         Touch(now);
     }
 
@@ -212,7 +248,24 @@ public sealed class AgentDefinition
         Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
 
     private static AgentExecutionType ValidateExecutionType(AgentExecutionType value) =>
-        value == AgentExecutionType.Test ? value : throw new ArgumentOutOfRangeException(nameof(value));
+        Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
+
+    private void ApplyAiConfiguration(AgentExecutionType type, string? prompt, string? routes,
+        string? tools, int? maxInput, int? maxOutput, decimal? maxCost, int maxAttempts)
+    {
+        if (type == AgentExecutionType.Test)
+        {
+            SystemPrompt = ModelRoutesJson = ToolPolicyJson = null;
+            MaxInputTokens = MaxOutputTokens = null; MaxEstimatedCostUsd = null; MaxAttempts = 1; return;
+        }
+        prompt = prompt?.Trim(); routes = routes?.Trim(); tools = tools?.Trim();
+        if (string.IsNullOrWhiteSpace(prompt) || prompt.Length > SystemPromptMaxLength) throw new ArgumentException("AI system prompt is required.");
+        if (string.IsNullOrWhiteSpace(routes) || routes.Length > ConfigurationJsonMaxLength) throw new ArgumentException("AI model routes are required.");
+        if (tools?.Length > ConfigurationJsonMaxLength) throw new ArgumentException("Tool policy is too large.");
+        if (maxInput is <= 0 || maxOutput is <= 0 || maxCost is <= 0 || maxAttempts is < 1 or > 10) throw new ArgumentException("AI budget is invalid.");
+        SystemPrompt = prompt; ModelRoutesJson = routes; ToolPolicyJson = tools ?? "[]";
+        MaxInputTokens = maxInput; MaxOutputTokens = maxOutput; MaxEstimatedCostUsd = maxCost; MaxAttempts = maxAttempts;
+    }
 
     private void EnsureNotArchived()
     {

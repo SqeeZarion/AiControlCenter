@@ -1,9 +1,10 @@
 using System.Text.Json.Serialization;
-using AiControlCenter.ControlPlane.Application;
 using AiControlCenter.ControlPlane.Api;
 using AiControlCenter.ControlPlane.Api.Grpc;
+using AiControlCenter.ControlPlane.Application;
 using AiControlCenter.ControlPlane.Infrastructure;
 using AiControlCenter.ControlPlane.Infrastructure.Persistence;
+using AiControlCenter.Grpc.Contracts.V1;
 using AiControlCenter.Observability;
 using AiControlCenter.Security;
 using FluentValidation;
@@ -25,6 +26,12 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ControlPlaneDbContext>("control-plane-database", tags: ["ready"]);
 builder.Services.AddGrpc();
+builder.Services.AddScoped<IAgentModelRouteValidator, AgentModelRouteValidator>();
+builder.Services.AddGrpcClient<AiProviderExecution.AiProviderExecutionClient>(options =>
+{
+    options.Address = new Uri(builder.Configuration["IntegrationsGrpc:Address"]
+        ?? "http://integrations-api:8081");
+});
 builder.Services.AddGrpcReflection();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
