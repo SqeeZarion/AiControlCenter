@@ -1,5 +1,5 @@
 export type AgentStatus = 'Active' | 'Inactive';
-export type AgentExecutionType = 'Test';
+export type AgentExecutionType = 'Test' | 'Ai';
 
 export interface AgentDefinitionDto {
   id: string;
@@ -14,6 +14,13 @@ export interface AgentDefinitionDto {
   archivedAt: string | null;
   version: number;
   isArchived: boolean;
+  systemPrompt?: string | null;
+  modelRoutesJson?: string | null;
+  toolPolicyJson?: string | null;
+  maxInputTokens?: number | null;
+  maxOutputTokens?: number | null;
+  maxEstimatedCostUsd?: number | null;
+  maxAttempts?: number;
 }
 
 export interface AgentDefinitionListDto {
@@ -40,6 +47,13 @@ export interface AgentContent {
   description: string | null;
   status: AgentStatus;
   executionType: AgentExecutionType;
+  systemPrompt?: string | null;
+  modelRoutesJson?: string | null;
+  toolPolicyJson?: string | null;
+  maxInputTokens?: number | null;
+  maxOutputTokens?: number | null;
+  maxEstimatedCostUsd?: number | null;
+  maxAttempts?: number;
 }
 
 export type CreateAgentRequest = AgentContent;

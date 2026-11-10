@@ -111,7 +111,11 @@ export class AgentListComponent implements OnInit {
     this.error.set('');
     try {
       const run = await firstValueFrom(
-        this.runsApi.create(agent.id, this.inputFor(agent.id), this.outcomeFor(agent.id)),
+        this.runsApi.create(
+          agent.id,
+          this.inputFor(agent.id),
+          agent.executionType === 'Test' ? this.outcomeFor(agent.id) : undefined,
+        ),
       );
       await this.router.navigate(['/runs', run.id]);
     } catch (error) {

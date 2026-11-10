@@ -44,4 +44,39 @@ describe('RunApiService', () => {
     detailsRequest.flush({ id: 'run/id' });
     await details;
   });
+
+  it('sends an AI prompt without a forged deterministic outcome', async () => {
+    const create = firstValueFrom(api.create('ai-agent-id', 'Explain the current system state'));
+    const request = http.expectOne('/api/orchestrator/v1/runs');
+
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      agentId: 'ai-agent-id',
+      input: 'Explain the current system state',
+    });
+    expect(request.request.body).not.toHaveProperty('expectedOutcome');
+
+    request.flush({ id: 'ai-run-id' });
+    await create;
+  });
+
+  it('uses the owner-protected provider preflight before resume', async () => {
+    const preflight = firstValueFrom(api.preflight('run/id'));
+    const request = http.expectOne('/api/orchestrator/v1/runs/run%2Fid/preflight');
+    expect(request.request.method).toBe('POST');
+    request.flush({ available: true, code: 'Available' });
+
+    await expect(preflight).resolves.toEqual({ available: true, code: 'Available' });
+  });
+
+  it('sends a stable explicit idempotency key for a resume user action', async () => {
+    const resume = firstValueFrom(api.resume('run/id', '8f36625e-447d-4cef-b3aa-469d9630e8fb'));
+    const request = http.expectOne('/api/orchestrator/v1/runs/run%2Fid/resume');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      operationId: '8f36625e-447d-4cef-b3aa-469d9630e8fb',
+    });
+    request.flush({ id: 'run/id' });
+    await resume;
+  });
 });
