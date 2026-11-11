@@ -12,11 +12,19 @@ public sealed record CreateAgentDefinitionRequest(
     string? Code,
     string? Description,
     AgentDefinitionStatus? Status,
-    AgentExecutionType? ExecutionType)
+    AgentExecutionType? ExecutionType,
+    string? SystemPrompt = null,
+    string? ModelRoutesJson = null,
+    string? ToolPolicyJson = null,
+    int? MaxInputTokens = null,
+    int? MaxOutputTokens = null,
+    decimal? MaxEstimatedCostUsd = null,
+    int MaxAttempts = 1)
 {
     //Метод перетворює зовнішню HTTP-модель на внутрішню команду
     public CreateAgentDefinitionCommand ToCommand() => new(
-        DirectionId!.Value, Name!, Code!, Description, Status!.Value, ExecutionType!.Value);
+        DirectionId!.Value, Name!, Code!, Description, Status!.Value, ExecutionType!.Value,
+        SystemPrompt, ModelRoutesJson, ToolPolicyJson, MaxInputTokens, MaxOutputTokens, MaxEstimatedCostUsd, MaxAttempts);
 }
 
 //модель, але для редагування агента
@@ -27,10 +35,18 @@ public sealed record UpdateAgentDefinitionRequest(
     string? Description,
     AgentDefinitionStatus? Status,
     AgentExecutionType? ExecutionType,
-    uint? Version)
+    uint? Version,
+    string? SystemPrompt = null,
+    string? ModelRoutesJson = null,
+    string? ToolPolicyJson = null,
+    int? MaxInputTokens = null,
+    int? MaxOutputTokens = null,
+    decimal? MaxEstimatedCostUsd = null,
+    int MaxAttempts = 1)
 {
     public UpdateAgentDefinitionCommand ToCommand() => new(
-        DirectionId!.Value, Name!, Code!, Description, Status!.Value, ExecutionType!.Value, Version!.Value);
+        DirectionId!.Value, Name!, Code!, Description, Status!.Value, ExecutionType!.Value, Version!.Value,
+        SystemPrompt, ModelRoutesJson, ToolPolicyJson, MaxInputTokens, MaxOutputTokens, MaxEstimatedCostUsd, MaxAttempts);
 }
 
 public sealed class CreateAgentDefinitionRequestValidator : AbstractValidator<CreateAgentDefinitionRequest>

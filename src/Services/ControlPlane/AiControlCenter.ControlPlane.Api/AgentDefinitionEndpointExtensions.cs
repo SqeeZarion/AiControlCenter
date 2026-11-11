@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using AiControlCenter.ControlPlane.Application;
 using AiControlCenter.ControlPlane.Domain;
 using AiControlCenter.Security;
@@ -25,17 +26,18 @@ public static class AgentDefinitionEndpointExtensions
         var mutations = agents.MapGroup(string.Empty)
             .RequireAuthorization(SecurityPolicyNames.AdminOrDeveloper);
         mutations.MapPost("/", async (
+            HttpContext context,
             CreateAgentDefinitionRequest request,
             AgentDefinitionApplicationService service,
             CancellationToken cancellationToken) =>
         {
-            var agent = await service.CreateAsync(request.ToCommand(), cancellationToken);
+            var agent = await service.CreateAsync(UserId(context), request.ToCommand(), cancellationToken);
             return Results.Json(agent, statusCode: StatusCodes.Status201Created);
         }).AddEndpointFilter<ValidationFilter<CreateAgentDefinitionRequest>>();
         mutations.MapPut("/{id:guid}", async (
-            Guid id, UpdateAgentDefinitionRequest request,
+            HttpContext context, Guid id, UpdateAgentDefinitionRequest request,
             AgentDefinitionApplicationService service, CancellationToken cancellationToken) =>
-            Results.Ok(await service.UpdateAsync(id, request.ToCommand(), cancellationToken)))
+            Results.Ok(await service.UpdateAsync(id, UserId(context), request.ToCommand(), cancellationToken)))
             .AddEndpointFilter<ValidationFilter<UpdateAgentDefinitionRequest>>();
         mutations.MapPatch("/{id:guid}/status", async (
             Guid id, ChangeAgentDefinitionStatusCommand command,
@@ -54,5 +56,13 @@ public static class AgentDefinitionEndpointExtensions
             .AddEndpointFilter<ValidationFilter<RestoreAgentDefinitionCommand>>();
 
         return endpoints;
+    }
+
+    private static Guid UserId(HttpContext context)
+    {
+        var subject = context.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        return Guid.TryParse(subject, out var owner) && owner != Guid.Empty
+            ? owner
+            : throw new BadHttpRequestException("Authenticated user id is invalid.");
     }
 }

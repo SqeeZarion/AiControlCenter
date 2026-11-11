@@ -26,6 +26,7 @@ public static class RabbitMqExtensions
                 outbox.QueryDelay = TimeSpan.FromMilliseconds(250);
             });
             configurator.AddConsumer<AgentRunExecutionFaultConsumer>();
+            configurator.AddConsumer<AiAgentRunExecutionFaultConsumer>();
             configurator.UsingRabbitMq((context, rabbit) =>
             {
                 //DNS-ім’я контейнера RabbitMQ;
@@ -49,6 +50,7 @@ public static class RabbitMqExtensions
                 {
                     endpoint.UseEntityFrameworkOutbox<OrchestratorDbContext>(context);
                     endpoint.ConfigureConsumer<AgentRunExecutionFaultConsumer>(context);
+                    endpoint.ConfigureConsumer<AiAgentRunExecutionFaultConsumer>(context);
                 });
             });
         });

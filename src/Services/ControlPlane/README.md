@@ -1,6 +1,6 @@
 # ControlPlane
 
-ControlPlane має ізольований HTTP/gRPC host і власну PostgreSQL-схему. Він володіє каталогами `Direction` та прив’язаних `AgentDefinition`, їх CRUD/status/archive lifecycle без hard delete. Через `AgentCatalog.GetRunnableAgent` Orchestrator отримує snapshot лише активного, неархівованого агента в активному напрямку.
+ControlPlane має ізольований HTTP/gRPC host і власну PostgreSQL-схему. Він володіє каталогами `Direction` та прив’язаних `AgentDefinition`, їх CRUD/status/archive lifecycle без hard delete. AI AgentDefinition містить prompt, ordered ModelRoutes, allowlisted tools і budgets, але не provider credentials. Через `AgentCatalog.GetRunnableAgent` Orchestrator отримує immutable snapshot лише активного, неархівованого агента в активному напрямку.
 
 ```mermaid
 flowchart LR
@@ -25,3 +25,5 @@ flowchart LR
 [Модель і API Directions](../../../docs/architecture/directions.md)
 
 [Agents, Runs і Worker](../../../docs/architecture/agents-runs-worker.md)
+
+[AI providers і routing](../../../docs/architecture/ai-providers.md)

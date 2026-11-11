@@ -6,7 +6,6 @@ import { LoginComponent } from './features/auth/login/login.component';
 import { OperationsCenterComponent } from './features/operations/operations-center.component';
 import { DirectionFormComponent } from './features/directions/direction-form.component';
 import { DirectionListComponent } from './features/directions/direction-list.component';
-import { AgentFormComponent } from './features/agents/agent-form.component';
 import { AgentListComponent } from './features/agents/agent-list.component';
 import { RunDetailComponent } from './features/runs/run-detail.component';
 import { RunListComponent } from './features/runs/run-list.component';
@@ -29,14 +28,27 @@ export const routes: Routes = [
       { path: 'runs', component: RunListComponent },
       { path: 'runs/:id', component: RunDetailComponent },
       {
+        path: 'providers',
+        loadComponent: () =>
+          import('./features/providers/provider-connections.component').then(
+            (module) => module.ProviderConnectionsComponent,
+          ),
+      },
+      {
         path: 'agents/new',
-        component: AgentFormComponent,
+        loadComponent: () =>
+          import('./features/agents/agent-form.component').then(
+            (module) => module.AgentFormComponent,
+          ),
         canActivate: [roleGuard],
         data: { roles: ['Admin', 'Developer'] },
       },
       {
         path: 'agents/:id/edit',
-        component: AgentFormComponent,
+        loadComponent: () =>
+          import('./features/agents/agent-form.component').then(
+            (module) => module.AgentFormComponent,
+          ),
         canActivate: [roleGuard],
         data: { roles: ['Admin', 'Developer'] },
       },

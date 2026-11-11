@@ -17,6 +17,7 @@ public sealed partial class OrchestratorExceptionHandler(ILogger<OrchestratorExc
         {
             AgentRunNotFoundException or AgentRunAccessDeniedException => (404, "Run not found."),
             AgentRunAgentNotFoundException => (404, "Agent not found."),
+            AgentRunResumeBlockedException => (409, exception.Message),
             AgentRunConflictException => (409, exception.Message),
             AgentCatalogUnavailableException => (503, "Agent catalog is temporarily unavailable."),
             ValidationException or ArgumentException or BadHttpRequestException or JsonException =>
@@ -26,14 +27,17 @@ public sealed partial class OrchestratorExceptionHandler(ILogger<OrchestratorExc
         if (status == 0) return false;
         LogRejectedRequest(logger, status, httpContext.Request.Method, httpContext.Request.Path);
         httpContext.Response.StatusCode = status;
-        await httpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        var problem = new ProblemDetails
         {
             Status = status,
             Title = title,
             Type = $"https://httpstatuses.com/{status}",
             Instance = httpContext.Request.Path,
             Extensions = { ["traceId"] = httpContext.TraceIdentifier },
-        }, cancellationToken);
+        };
+        if (exception is AgentRunResumeBlockedException blocked)
+            problem.Extensions["code"] = blocked.Code;
+        await httpContext.Response.WriteAsJsonAsync(problem, cancellationToken);
         return true;
     }
 

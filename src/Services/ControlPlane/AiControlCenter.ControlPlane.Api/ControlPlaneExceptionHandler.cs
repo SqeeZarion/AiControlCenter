@@ -24,6 +24,8 @@ public sealed partial class ControlPlaneExceptionHandler(ILogger<ControlPlaneExc
                 (StatusCodes.Status409Conflict, exception.Message),
             AgentDefinitionConflictException or AgentDefinitionRuleViolationException =>
                 (StatusCodes.Status409Conflict, exception.Message),
+            AgentModelRouteValidationException routeFailure =>
+                (routeFailure.StatusCode, exception.Message),
             AgentNotRunnableException => (StatusCodes.Status409Conflict, exception.Message),
             ValidationException or ArgumentException or BadHttpRequestException or JsonException =>
                 (StatusCodes.Status400BadRequest, "Validation failed."),
@@ -36,14 +38,32 @@ public sealed partial class ControlPlaneExceptionHandler(ILogger<ControlPlaneExc
 
         LogRejectedRequest(logger, status, httpContext.Request.Method, httpContext.Request.Path);
         httpContext.Response.StatusCode = status;
-        await httpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        var details = new ProblemDetails
         {
             Status = status,
             Title = title,
             Type = $"https://httpstatuses.com/{status}",
             Instance = httpContext.Request.Path,
-            Extensions = { ["traceId"] = httpContext.TraceIdentifier },
-        }, cancellationToken);
+            Extensions = { ["traceId"] = httpContext.TraceIdentifier,
+                ["correlationId"] = httpContext.TraceIdentifier },
+        };
+        if (exception is AgentModelRouteValidationException routeValidation)
+        {
+            details.Title = routeValidation.Message;
+            details.Extensions["code"] = routeValidation.Code;
+            details.Extensions["field"] = routeValidation.Field;
+        }
+        else if (exception is ValidationException validation)
+        {
+            var first = validation.Errors.FirstOrDefault();
+            details.Extensions["code"] = "AgentDefinitionValidationFailed";
+            details.Extensions["field"] = first?.PropertyName ?? string.Empty;
+            details.Extensions["errors"] = validation.Errors
+                .GroupBy(error => error.PropertyName)
+                .ToDictionary(group => group.Key,
+                    group => group.Select(error => error.ErrorMessage).Distinct().ToArray());
+        }
+        await httpContext.Response.WriteAsJsonAsync(details, cancellationToken);
         return true;
     }
 

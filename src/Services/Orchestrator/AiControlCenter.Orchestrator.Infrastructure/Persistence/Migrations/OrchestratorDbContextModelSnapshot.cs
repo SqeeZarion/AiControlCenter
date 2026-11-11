@@ -54,6 +54,23 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("agent_version");
 
+                    b.Property<string>("CheckpointHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("checkpoint_hash");
+
+                    b.Property<string>("CheckpointJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("checkpoint_json");
+
+                    b.Property<DateTimeOffset?>("CheckpointUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checkpoint_updated_at");
+
+                    b.Property<int>("CheckpointVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint_version");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -115,6 +132,27 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("input");
 
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_attempts");
+
+                    b.Property<decimal?>("MaxEstimatedCostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("max_estimated_cost_usd");
+
+                    b.Property<int?>("MaxInputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_input_tokens");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
+
+                    b.Property<string>("ModelRoutesJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("model_routes_json");
+
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
@@ -134,9 +172,18 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("status");
+
+                    b.Property<string>("SystemPrompt")
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)")
+                        .HasColumnName("system_prompt");
+
+                    b.Property<string>("ToolPolicyJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tool_policy_json");
 
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
@@ -159,21 +206,203 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
 
                     b.ToTable("agent_runs", "orchestrator", t =>
                         {
-                            t.HasCheckConstraint("ck_agent_runs_execution_type", "execution_type = 'Test'");
+                            t.HasCheckConstraint("ck_agent_runs_checkpoint", "(checkpoint_json IS NULL AND checkpoint_version = 0 AND checkpoint_hash IS NULL AND checkpoint_updated_at IS NULL) OR (checkpoint_json IS NOT NULL AND checkpoint_version > 0 AND length(checkpoint_hash) = 64 AND checkpoint_updated_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_agent_runs_execution_type", "execution_type IN ('Test','Ai')");
 
                             t.HasCheckConstraint("ck_agent_runs_expected_outcome", "expected_outcome IN ('Succeed','Fail')");
 
-                            t.HasCheckConstraint("ck_agent_runs_lifecycle", "(status = 'Queued' AND started_at IS NULL AND completed_at IS NULL) OR (status = 'Running' AND started_at IS NOT NULL AND completed_at IS NULL) OR (status = 'Succeeded' AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR (status = 'Failed' AND completed_at IS NOT NULL)");
+                            t.HasCheckConstraint("ck_agent_runs_lifecycle", "(status = 'Queued' AND started_at IS NULL AND completed_at IS NULL) OR (status = 'Running' AND started_at IS NOT NULL AND completed_at IS NULL) OR (status = 'Succeeded' AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR (status = 'Failed' AND completed_at IS NOT NULL) OR (status IN ('PausedProviderUnavailable','PausedInsufficientFunds') AND started_at IS NOT NULL AND completed_at IS NULL) OR (status = 'Cancelled' AND completed_at IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_agent_runs_revision", "revision >= 1");
 
                             t.HasCheckConstraint("ck_agent_runs_snapshot_versions", "agent_version > 0 AND direction_version > 0");
 
-                            t.HasCheckConstraint("ck_agent_runs_status", "status IN ('Queued','Running','Succeeded','Failed')");
+                            t.HasCheckConstraint("ck_agent_runs_status", "status IN ('Queued','Running','Succeeded','Failed','PausedProviderUnavailable','PausedInsufficientFunds','Cancelled')");
 
-                            t.HasCheckConstraint("ck_agent_runs_terminal_payload", "(status IN ('Queued','Running') AND result IS NULL AND error IS NULL) OR (status = 'Succeeded' AND error IS NULL) OR (status = 'Failed' AND error IS NOT NULL AND btrim(error) <> '')");
+                            t.HasCheckConstraint("ck_agent_runs_terminal_payload", "(status IN ('Queued','Running') AND result IS NULL AND error IS NULL) OR (status IN ('PausedProviderUnavailable','PausedInsufficientFunds') AND result IS NULL AND error IS NOT NULL) OR (status = 'Succeeded' AND error IS NULL) OR (status IN ('Failed','Cancelled') AND error IS NOT NULL AND btrim(error) <> '')");
 
                             t.HasCheckConstraint("ck_agent_runs_timestamps", "(started_at IS NULL OR started_at >= created_at) AND (completed_at IS NULL OR completed_at >= COALESCE(started_at, created_at))");
+                        });
+                });
+
+            modelBuilder.Entity("AiControlCenter.Orchestrator.Domain.AiProviderAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActualModel")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("actual_model");
+
+                    b.Property<Guid>("AgentRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_run_id");
+
+                    b.Property<int?>("CachedInputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("cached_input_tokens");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("CostSource")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("cost_source");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("error_code");
+
+                    b.Property<decimal?>("EstimatedCostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("estimated_cost_usd");
+
+                    b.Property<string>("FailureKind")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("failure_kind");
+
+                    b.Property<string>("FallbackReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("fallback_reason");
+
+                    b.Property<string>("FinishStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("finish_status");
+
+                    b.Property<string>("GenerationDispatched")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("generation_dispatched");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<long>("LatencyMilliseconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("latency_milliseconds");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Operation")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("PartialOutput")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("partial_output");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ProviderRequestId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("provider_request_id");
+
+                    b.Property<int>("RequestCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_count");
+
+                    b.Property<int>("RoutePriority")
+                        .HasColumnType("integer")
+                        .HasColumnName("route_priority");
+
+                    b.Property<string>("SafeExceptionType")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("safe_exception_type");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TotalTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_tokens");
+
+                    b.Property<string>("UsageSource")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("usage_source");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentRunId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_provider_attempts_run_sequence");
+
+                    b.HasIndex("OwnerUserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_provider_attempts_owner_idempotency");
+
+                    b.ToTable("ai_provider_attempts", "orchestrator", t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_provider_attempts_cost", "estimated_cost_usd IS NULL OR estimated_cost_usd >= 0");
+
+                            t.HasCheckConstraint("ck_ai_provider_attempts_generation_dispatched", "generation_dispatched IS NULL OR generation_dispatched IN ('true','false','unknown')");
+
+                            t.HasCheckConstraint("ck_ai_provider_attempts_route", "route_priority > 0 AND latency_milliseconds >= 0 AND request_count = 1");
+
+                            t.HasCheckConstraint("ck_ai_provider_attempts_sequence", "sequence > 0");
+
+                            t.HasCheckConstraint("ck_ai_provider_attempts_timestamps", "completed_at >= started_at");
+
+                            t.HasCheckConstraint("ck_ai_provider_attempts_tokens", "input_tokens >= 0 AND output_tokens >= 0");
+
+                            t.HasCheckConstraint("ck_ai_provider_attempts_totals", "cached_input_tokens >= 0 AND total_tokens = input_tokens + output_tokens");
                         });
                 });
 
@@ -228,11 +457,11 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
 
                     b.ToTable("run_steps", "orchestrator", t =>
                         {
-                            t.HasCheckConstraint("ck_run_steps_lifecycle", "(status = 'Running' AND completed_at IS NULL) OR (status IN ('Succeeded','Failed') AND completed_at IS NOT NULL)");
+                            t.HasCheckConstraint("ck_run_steps_lifecycle", "(status IN ('Running','Paused') AND completed_at IS NULL) OR (status IN ('Succeeded','Failed') AND completed_at IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_run_steps_sequence", "sequence BETWEEN 1 AND 16");
 
-                            t.HasCheckConstraint("ck_run_steps_status", "status IN ('Running','Succeeded','Failed')");
+                            t.HasCheckConstraint("ck_run_steps_status", "status IN ('Running','Succeeded','Failed','Paused')");
 
                             t.HasCheckConstraint("ck_run_steps_timestamps", "updated_at >= started_at AND (completed_at IS NULL OR completed_at >= started_at)");
                         });
@@ -406,6 +635,16 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
                     b.ToTable("OutboxState", "orchestrator");
                 });
 
+            modelBuilder.Entity("AiControlCenter.Orchestrator.Domain.AiProviderAttempt", b =>
+                {
+                    b.HasOne("AiControlCenter.Orchestrator.Domain.AgentRun", null)
+                        .WithMany("Attempts")
+                        .HasForeignKey("AgentRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ai_provider_attempts_agent_runs_run_id");
+                });
+
             modelBuilder.Entity("AiControlCenter.Orchestrator.Domain.RunStep", b =>
                 {
                     b.HasOne("AiControlCenter.Orchestrator.Domain.AgentRun", null)
@@ -430,6 +669,8 @@ namespace AiControlCenter.Orchestrator.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AiControlCenter.Orchestrator.Domain.AgentRun", b =>
                 {
+                    b.Navigation("Attempts");
+
                     b.Navigation("Steps");
                 });
 #pragma warning restore 612, 618

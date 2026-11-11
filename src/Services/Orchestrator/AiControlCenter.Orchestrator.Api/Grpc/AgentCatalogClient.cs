@@ -25,7 +25,15 @@ public sealed class AgentCatalogClient(
                 reply.AgentName, reply.AgentCode,
                 string.IsNullOrEmpty(reply.AgentDescription) ? null : reply.AgentDescription,
                 reply.AgentVersion, reply.ExecutionType,
-                Guid.Parse(reply.DirectionId), reply.DirectionName, reply.DirectionCode, reply.DirectionVersion);
+                Guid.Parse(reply.DirectionId), reply.DirectionName, reply.DirectionCode, reply.DirectionVersion,
+                string.IsNullOrEmpty(reply.SystemPrompt) ? null : reply.SystemPrompt,
+                string.IsNullOrEmpty(reply.ModelRoutesJson) ? null : reply.ModelRoutesJson,
+                string.IsNullOrEmpty(reply.ToolPolicyJson) ? null : reply.ToolPolicyJson,
+                reply.MaxInputTokens == 0 ? null : reply.MaxInputTokens,
+                reply.MaxOutputTokens == 0 ? null : reply.MaxOutputTokens,
+                decimal.TryParse(reply.MaxEstimatedCostUsd, System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture, out var maxCost) ? maxCost : null,
+                reply.MaxAttempts);
         }
         catch (RpcException exception) when (exception.StatusCode == StatusCode.FailedPrecondition)
         {

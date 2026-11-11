@@ -49,7 +49,7 @@ internal sealed class AgentRunRepository(OrchestratorDbContext dbContext) : IAge
 
     public Task<AgentRun?> GetAsync(Guid id, bool tracking, CancellationToken cancellationToken)
     {
-        var query = dbContext.AgentRuns.Include(run => run.Steps).AsQueryable();
+        var query = dbContext.AgentRuns.Include(run => run.Steps).Include(run => run.Attempts).AsQueryable();
         if (!tracking) query = query.AsNoTracking();
         return query.SingleOrDefaultAsync(run => run.Id == id, cancellationToken);
     }
@@ -65,6 +65,7 @@ internal sealed class AgentRunRepository(OrchestratorDbContext dbContext) : IAge
         // collection in the locking query can retain its pre-wait snapshot and miss a step
         // committed by the transaction that released the lock.
         await dbContext.Entry(run).Collection(item => item.Steps).LoadAsync(cancellationToken);
+        await dbContext.Entry(run).Collection(item => item.Attempts).LoadAsync(cancellationToken);
         return run;
     }
 }

@@ -64,3 +64,13 @@ Gateway consumer надсилає подію лише в серверні гру
 `v1` у route, protobuf package і CLR namespace є частиною versioning contract.
 
 [Комунікація](communication.md) · [Межі сервісів](service-boundaries.md) · [ADR](adr/0007-agent-run-delivery-and-ownership.md)
+
+## AI execution у Stage 5
+
+Для `executionType=Ai` ControlPlane повертає prompt, ordered routes, tool policy та budgets як частину versioned snapshot. Orchestrator зберігає цей snapshot у Run, тому подальше редагування AgentDefinition не змінює вже створене виконання. Через outbox публікується `ExecuteAiAgentRunV1`; raw credentials у message відсутні.
+
+Worker передає owner/connection/model/idempotency metadata до Integrations gRPC. Кожна спроба повертається через `RunProgress.ReportAttempt` і записується з actual model, route priority, provider request ID, latency, tokens, estimated cost, metric source, finish/fallback status та partial output. `AttemptOffset` і накопичена estimated cost роблять Resume продовженням, а не новим Run.
+
+`PausedProviderUnavailable` і `PausedInsufficientFunds` є non-terminal станами. Resume дозволений лише з цих станів; terminal invariants `Succeeded`/`Failed`/`Cancelled` не послаблюються. SignalR як і раніше містить лише bounded change event, а Angular перечитує повний Run через REST.
+
+Деталі provider boundary: [AI-провайдери, routing, attempts і tools](ai-providers.md).

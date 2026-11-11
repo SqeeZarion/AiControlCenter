@@ -1,0 +1,715 @@
+<section class="provider-page">
+  <header class="provider-heading">
+    <div class="heading-copy">
+      <p class="eyebrow">Integrations</p>
+      <h2>AI-провайдери</h2>
+      <p>
+        Credentials зберігаються зашифрованими й ніколи не повертаються в UI. Ключі можна лише
+        додати або безпечно замінити.
+      </p>
+    </div>
+    <div class="oauth-action">
+      @if (capabilities().githubCopilotOAuthEnabled) {
+        <button
+          class="oauth-button"
+          data-testid="github-oauth"
+          type="button"
+          [disabled]="connectingGitHub() || githubOAuthStatus() !== 'Available'"
+          (click)="connectGitHub()"
+        >
+          {{ connectingGitHub() ? 'Підключення…' : 'Підключити GitHub Copilot' }}
+        </button>
+      }
+      @if (capabilities().githubCopilotPatEnabled) {
+        <button
+          class="secondary-button"
+          data-testid="github-pat-toggle"
+          type="button"
+          [disabled]="connectingGitHubPat()"
+          (click)="toggleGitHubPatForm()"
+        >
+          {{ showGitHubPatForm() ? 'Скасувати PAT' : 'Резервний fine-grained PAT' }}
+        </button>
+      }
+      @if (capabilities().githubCopilotOAuthEnabled && githubOAuthStatus() === 'NotConfigured') {
+        <span class="oauth-helper" data-testid="github-oauth-not-configured">
+          GitHub OAuth не налаштовано. Створіть OAuth App і додайте локальні параметри Integrations
+          API.
+        </span>
+      }
+    </div>
+  </header>
+
+  @if (capabilities().githubCopilotPatEnabled && showGitHubPatForm()) {
+    <section class="panel pat-panel" aria-labelledby="github-pat-heading">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">Fallback credential</p>
+          <h3 id="github-pat-heading">Підключити GitHub Copilot через PAT</h3>
+        </div>
+      </div>
+      <p class="helper-text">
+        Створіть персональний fine-grained token у GitHub із permission
+        <strong>Copilot Requests</strong>. Classic PAT із префіксом <code>ghp_</code> не
+        підтримується. Значення write-only: після перевірки воно зберігається лише зашифрованим.
+      </p>
+      <form [formGroup]="githubPatForm" (ngSubmit)="connectGitHubPat()" novalidate>
+        <div class="field-grid">
+          <div class="field">
+            <label for="github-expected-login">Очікуваний GitHub login</label>
+            <input
+              id="github-expected-login"
+              data-testid="github-expected-login"
+              formControlName="expectedGitHubLogin"
+              maxlength="100"
+              autocomplete="username"
+              placeholder="username"
+            />
+            @if (githubPatForm.controls.expectedGitHubLogin.touched) {
+              @if (githubPatForm.controls.expectedGitHubLogin.hasError('required')) {
+                <span class="field-error">Введіть очікуваний GitHub login.</span>
+              } @else if (githubPatForm.controls.expectedGitHubLogin.hasError('maxlength')) {
+                <span class="field-error">GitHub login задовгий.</span>
+              } @else if (
+                githubPatForm.controls.expectedGitHubLogin.hasError('githubLoginFormat')
+              ) {
+                <span class="field-error">GitHub login може містити літери, цифри та дефіс.</span>
+              }
+            }
+          </div>
+          <div class="field">
+            <label for="github-fine-grained-pat">Fine-grained PAT</label>
+            <input
+              id="github-fine-grained-pat"
+              data-testid="github-pat-credential"
+              formControlName="personalAccessToken"
+              type="password"
+              autocomplete="new-password"
+              maxlength="8192"
+              aria-describedby="github-pat-help"
+            />
+            <span id="github-pat-help" class="helper-text">
+              Token обробляється як opaque secret: перевіряються лише префікс
+              <code>github_pat_</code> і безпечна межа довжини. Справжню валідність підтверджує
+              GitHub.
+            </span>
+            @if (githubPatForm.controls.personalAccessToken.touched) {
+              @if (githubPatForm.controls.personalAccessToken.hasError('required')) {
+                <span class="field-error">Вставте fine-grained PAT.</span>
+              } @else if (
+                githubPatForm.controls.personalAccessToken.hasError('unsupportedCredentialType')
+              ) {
+                <span class="field-error">
+                  Підтримується лише fine-grained PAT із префіксом <code>github_pat_</code>.
+                </span>
+              } @else if (
+                githubPatForm.controls.personalAccessToken.hasError('missingTokenValue')
+              ) {
+                <span class="field-error">Після префікса відсутнє значення token.</span>
+              } @else if (githubPatForm.controls.personalAccessToken.hasError('maxlength')) {
+                <span class="field-error">Credential перевищує безпечну межу довжини.</span>
+              } @else if (
+                githubPatForm.controls.personalAccessToken.hasError('malformedCredential')
+              ) {
+                <span class="field-error">Credential містить whitespace усередині значення.</span>
+              }
+            }
+          </div>
+        </div>
+        <div class="form-actions">
+          <button
+            class="primary-button"
+            data-testid="github-pat-submit"
+            type="submit"
+            [disabled]="githubPatForm.invalid || connectingGitHubPat()"
+          >
+            {{ connectingGitHubPat() ? 'Безпечна перевірка…' : 'Перевірити й підключити PAT' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  }
+
+  @if (capabilities().localCopilotCliEnabled && localCliStatus()?.availableForCurrentUser) {
+    <section
+      class="panel form-card"
+      aria-labelledby="local-copilot-heading"
+      data-testid="local-copilot-card"
+    >
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">Development only</p>
+          <h3 id="local-copilot-heading">Local Copilot CLI — лише для локальної розробки</h3>
+        </div>
+        <div class="status-badges" aria-label="Local Copilot CLI status">
+          <span class="status-badge"
+            >Sidecar: {{ localCliStatus()?.sidecarState ?? 'Unavailable' }}</span
+          >
+          <span class="status-badge">
+            Authentication: {{ localCliStatus()?.authenticationState ?? 'Unknown' }}
+          </span>
+          <span class="status-badge">Models: {{ localCopilotModelsState() }}</span>
+        </div>
+      </div>
+      <p class="helper-text">
+        Використовує локальну GitHub Copilot-підписку власника цього connection через захищений
+        внутрішній sidecar. Токен не зберігається в AiControlCenter і не повертається у frontend.
+        Режим не призначений для shared production server.
+      </p>
+      @if (localCopilotConnection(); as localConnection) {
+        <dl class="connection-details" data-testid="local-copilot-account-metadata">
+          <div>
+            <dt>GitHub account</dt>
+            <dd>
+              {{
+                localConnection.externalAccountLogin
+                  ? '@' + localConnection.externalAccountLogin
+                  : 'ще не підтверджено'
+              }}
+            </dd>
+          </div>
+          <div>
+            <dt>Connection</dt>
+            <dd>{{ localConnection.displayName }}</dd>
+          </div>
+          <div>
+            <dt>Provider type</dt>
+            <dd>Local Copilot CLI</dd>
+          </div>
+          <div>
+            <dt>Connection status</dt>
+            <dd>{{ localConnection.status }}</dd>
+          </div>
+          <div>
+            <dt>Остання успішна перевірка</dt>
+            <dd>{{ formatDate(localConnection.lastSuccessfulValidationAt ?? null) }}</dd>
+          </div>
+          <div>
+            <dt>Остання синхронізація моделей</dt>
+            <dd>
+              {{ formatDate(localConnection.lastModelSyncAt ?? localConnection.lastSyncedAt) }}
+            </dd>
+          </div>
+          <div>
+            <dt>Джерело стану credential</dt>
+            <dd>{{ localConnection.credentialStatusSource ?? 'LocalCopilotCliRuntime' }}</dd>
+          </div>
+          <div>
+            <dt>Строк дії</dt>
+            <dd data-testid="local-copilot-expiration">
+              {{
+                localConnection.credentialExpiresAt
+                  ? 'Діє до ' + formatDate(localConnection.credentialExpiresAt)
+                  : 'Точний строк дії недоступний'
+              }}
+              @if (credentialExpiringSoon(localConnection.credentialExpiresAt)) {
+                <span class="status-badge warning">Expiring soon</span>
+              }
+            </dd>
+          </div>
+        </dl>
+        @if (!localConnection.credentialExpiresAt) {
+          <p class="helper-text">
+            Точний строк дії недоступний. Copilot CLI автоматично оновлює короткоживучі токени, а
+            доступність перевіряється перед виконанням.
+          </p>
+        }
+      }
+      <div class="form-actions">
+        <button
+          class="primary-button"
+          type="button"
+          data-testid="local-copilot-connect"
+          [disabled]="connectingLocalCli()"
+          (click)="connectLocalCopilotCli()"
+        >
+          {{ localCopilotActionLabel() }}
+        </button>
+        @if (
+          localCopilotCredentialReady() && capabilities().localCopilotCliReauthenticationEnabled
+        ) {
+          <button
+            class="secondary-button"
+            type="button"
+            data-testid="local-copilot-reauthenticate"
+            [disabled]="connectingLocalCli()"
+            (click)="openLocalCopilotReauthenticationConfirmation()"
+          >
+            Увійти заново / змінити акаунт
+          </button>
+        } @else if (localCopilotCredentialReady()) {
+          <button
+            class="secondary-button"
+            type="button"
+            data-testid="local-copilot-account-switch-unsupported"
+            disabled
+            title="Bundled Copilot CLI 1.0.103 не підтримує безпечний staged account switch"
+          >
+            Змінити акаунт
+          </button>
+        }
+        @if (localCopilotCredentialReady() && capabilities().localCopilotCliLogoutEnabled) {
+          <button
+            class="secondary-button"
+            type="button"
+            data-testid="local-copilot-logout"
+            [disabled]="connectingLocalCli()"
+            (click)="openLocalCopilotLogoutConfirmation()"
+          >
+            Завершити локальну сесію
+          </button>
+        }
+      </div>
+      @if (!capabilities().localCopilotCliReauthenticationEnabled) {
+        <p class="helper-text" data-testid="local-copilot-account-switch-explanation">
+          Безпечна зміна акаунта недоступна: bundled Copilot CLI 1.0.103 не підтримує ізольований
+          staged profile із атомарним activation/rollback. Чинна сесія не змінюється.
+        </p>
+      }
+      @if (localCopilotConnection(); as recoveryConnection) {
+        @if (
+          recoveryConnection.status === 'RequiresReconnect' ||
+          recoveryConnection.status === 'Invalid'
+        ) {
+          <div class="notice error" data-testid="local-copilot-recovery-panel">
+            <strong>{{
+              recoveryConnection.authenticationStatus ?? recoveryConnection.status
+            }}</strong>
+            <p>
+              {{ recoveryConnection.lastSafeError ?? 'Local Copilot CLI потребує відновлення.' }}
+            </p>
+            <p>
+              Остання успішна перевірка:
+              {{ formatDate(recoveryConnection.lastSuccessfulValidationAt ?? null) }}
+            </p>
+            <p>
+              Чинний credential зберігається тільки в Local Copilot CLI volume і не повертається в
+              AiControlCenter.
+            </p>
+            @if (capabilities().localCopilotCliReauthenticationEnabled) {
+              <ol>
+                <li>Натисніть «Відновити підключення».</li>
+                <li>Відкрийте офіційну GitHub device-flow сторінку.</li>
+                <li>Введіть показаний одноразовий код і виберіть GitHub-акаунт.</li>
+                <li>Поверніться в AiControlCenter та дочекайтеся Active / Synced.</li>
+                <li>Відновіть paused Run.</li>
+              </ol>
+            } @else {
+              <p>
+                Автоматичне відновлення недоступне для цієї pinned CLI-версії; чинний credential не
+                видалено.
+              </p>
+            }
+          </div>
+        }
+      }
+    </section>
+  }
+
+  @if (showLocalReauthenticationConfirmation()) {
+    <div class="modal-backdrop" data-testid="local-copilot-reauthentication-confirmation">
+      <section
+        class="panel reconnect-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reauthentication-confirmation-heading"
+      >
+        <p class="eyebrow">Local Copilot CLI</p>
+        <h3 id="reauthentication-confirmation-heading">Повторна авторизація</h3>
+        <p>
+          Чинна локальна сесія залишиться доступною до успішного завершення нового device login.
+          GitHub-підписка та поточна авторизація не видаляються. Для продовження потрібно буде
+          підтвердити новий одноразовий код.
+        </p>
+        <div class="form-actions">
+          <button
+            class="secondary-button"
+            data-testid="local-copilot-reauthentication-cancel"
+            type="button"
+            (click)="cancelLocalCopilotReauthentication()"
+          >
+            Скасувати
+          </button>
+          <button
+            class="danger-button"
+            data-testid="local-copilot-reauthentication-confirm"
+            type="button"
+            (click)="confirmLocalCopilotReauthentication()"
+          >
+            Авторизуватися заново
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (showLocalLogoutConfirmation()) {
+    <div class="modal-backdrop" data-testid="local-copilot-logout-confirmation">
+      <section class="panel reconnect-modal" role="dialog" aria-modal="true">
+        <p class="eyebrow">Local Copilot CLI</p>
+        <h3>Завершити локальну сесію</h3>
+        <p>
+          Ця дія виконає офіційний logout лише всередині локального Copilot CLI. Docker volume,
+          GitHub-підписка та GitHub authorization не видаляються.
+        </p>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" (click)="cancelLocalCopilotLogout()">
+            Скасувати
+          </button>
+          <button class="danger-button" type="button" (click)="confirmLocalCopilotLogout()">
+            Завершити сесію
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (showLocalReconnect() && localReconnect(); as reconnect) {
+    <div class="modal-backdrop" data-testid="local-copilot-reconnect-modal">
+      <section
+        class="panel reconnect-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reconnect-heading"
+      >
+        <p class="eyebrow">Official GitHub device flow</p>
+        <h3 id="reconnect-heading">Local Copilot CLI</h3>
+        @if (reconnect.state === 'Starting') {
+          <p>{{ localReconnectStageMessage(reconnect) }}</p>
+        } @else if (reconnect.state === 'WaitingForUser') {
+          <p>Відкрийте GitHub, увійдіть у потрібний акаунт і введіть одноразовий код.</p>
+          <a [href]="reconnect.verificationUri" target="_blank" rel="noopener noreferrer">
+            {{ reconnect.verificationUri }}
+          </a>
+          <div class="device-code" data-testid="local-copilot-user-code">
+            {{ reconnect.userCode }}
+          </div>
+          <button class="secondary-button" type="button" (click)="copyLocalCopilotCode()">
+            Скопіювати код
+          </button>
+        } @else {
+          <p data-testid="local-copilot-reconnect-stage">
+            {{ localReconnectStageMessage(reconnect) }}
+          </p>
+        }
+        <div class="form-actions">
+          @if (localReconnectIsTerminal(reconnect.state)) {
+            <button
+              class="secondary-button"
+              data-testid="local-copilot-reconnect-close"
+              type="button"
+              (click)="closeLocalCopilotReconnect()"
+            >
+              Закрити
+            </button>
+          } @else if (reconnect.canCancel !== false) {
+            <button class="danger-button" type="button" (click)="cancelLocalCopilotReconnect()">
+              Скасувати
+            </button>
+          }
+        </div>
+      </section>
+    </div>
+  }
+
+  <div class="feedback" aria-live="polite" aria-atomic="true">
+    @if (success()) {
+      <p class="notice success" role="status">{{ success() }}</p>
+    }
+    @if (error()) {
+      <p class="notice error" role="alert">{{ error() }}</p>
+    }
+  </div>
+
+  @if (usage(); as summary) {
+    <section class="panel usage-panel" aria-labelledby="usage-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Останні 30 днів</p>
+          <h3 id="usage-heading">Usage</h3>
+        </div>
+        <p>Дані лише з фактичної відповіді провайдера та обліку AiControlCenter.</p>
+      </div>
+      <dl class="metric-grid">
+        <div>
+          <dt>Requests</dt>
+          <dd>{{ summary.requestCount }}</dd>
+        </div>
+        <div>
+          <dt>Input tokens</dt>
+          <dd data-testid="usage-input-tokens">
+            {{ usageValue(summary.inputTokens, summary.usageSource) }}
+          </dd>
+        </div>
+        <div>
+          <dt>Cached tokens</dt>
+          <dd data-testid="usage-cached-tokens">
+            {{ usageValue(summary.cachedInputTokens, summary.usageSource) }}
+          </dd>
+        </div>
+        <div>
+          <dt>Output tokens</dt>
+          <dd data-testid="usage-output-tokens">
+            {{ usageValue(summary.outputTokens, summary.usageSource) }}
+          </dd>
+        </div>
+        <div>
+          <dt>Estimated cost</dt>
+          <dd data-testid="usage-cost">
+            {{ costValue(summary.estimatedCostUsd, summary.costSource) }}
+          </dd>
+        </div>
+      </dl>
+      <p class="helper-text">
+        Usage: {{ summary.usageSource }} · Cost: {{ summary.costSource }}. AiControlCenter не є
+        гаманцем; поповнення виконується безпосередньо у провайдера.
+      </p>
+    </section>
+  }
+
+  <section class="connections-section" aria-labelledby="connections-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Connections</p>
+        <h3 id="connections-heading">Наявні підключення</h3>
+      </div>
+      <span class="connection-count">{{ connections().length }}</span>
+    </div>
+
+    @if (loading()) {
+      <p class="empty-state" role="status">Завантаження підключень…</p>
+    } @else if (connections().length === 0) {
+      <div class="empty-state">
+        <strong>Підключень ще немає.</strong>
+        <span>Додайте тестовий провайдер або підключіть GitHub Copilot через OAuth чи PAT.</span>
+      </div>
+    } @else {
+      <div class="connection-grid">
+        @for (item of connections(); track item.id) {
+          <article class="connection-card" [class.is-revoked]="item.status === 'Revoked'">
+            <div class="card-heading">
+              <div>
+                <span class="provider-kind">{{ providerLabel(item.provider) }}</span>
+                <h4>{{ item.displayName }}</h4>
+              </div>
+              <span
+                class="status-badge"
+                [class]="'status-badge status-' + item.status.toLowerCase()"
+              >
+                {{ item.status }}
+              </span>
+            </div>
+
+            <dl class="connection-details">
+              <div>
+                <dt>Credential</dt>
+                <dd>
+                  {{
+                    item.credentialFingerprint
+                      ? '•••• ' + item.credentialFingerprint
+                      : 'не потрібен'
+                  }}
+                </dd>
+              </div>
+              <div>
+                <dt>Версія credential</dt>
+                <dd>{{ item.credentialVersion }}</dd>
+              </div>
+              <div>
+                <dt>Usage / cost</dt>
+                <dd>{{ item.quotaState }} · {{ item.quotaSource }}</dd>
+              </div>
+              @if (item.provider === 'GitHubCopilot' || item.provider === 'GitHubCopilotLocalCli') {
+                <div>
+                  <dt>GitHub account</dt>
+                  <dd data-testid="github-account">
+                    {{
+                      item.externalAccountLogin
+                        ? '@' + item.externalAccountLogin
+                        : 'ще не підтверджено'
+                    }}
+                  </dd>
+                </div>
+              }
+              <div>
+                <dt>Остання перевірка</dt>
+                <dd>{{ formatDate(item.lastValidatedAt) }}</dd>
+              </div>
+              <div>
+                <dt>Остання успішна перевірка</dt>
+                <dd>{{ formatDate(item.lastSuccessfulValidationAt ?? null) }}</dd>
+              </div>
+              <div>
+                <dt>Остання синхронізація</dt>
+                <dd>{{ formatDate(item.lastModelSyncAt ?? item.lastSyncedAt) }}</dd>
+              </div>
+              <div>
+                <dt>Authentication / models</dt>
+                <dd>
+                  {{ item.authenticationStatus ?? 'Unknown' }} ·
+                  {{ item.modelCatalogStatus ?? 'Unknown' }}
+                </dd>
+              </div>
+            </dl>
+
+            @if (item.lastSafeError) {
+              <p class="inline-error" role="status">{{ item.lastSafeError }}</p>
+            }
+
+            @if (selected() === item.id) {
+              <div class="model-list" aria-live="polite">
+                <strong>Доступні моделі</strong>
+                @if (modelsFor(item).length === 0) {
+                  <span>Провайдер не повернув доступних моделей.</span>
+                } @else {
+                  <ul>
+                    @for (model of modelsFor(item); track model.id) {
+                      <li>
+                        <code>{{ model.id }}</code
+                        ><span>{{ model.displayName }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+
+            <div class="card-actions">
+              <button
+                type="button"
+                [disabled]="actionId() !== null || item.status === 'Revoked'"
+                (click)="validate(item)"
+              >
+                {{ actionId() === 'validate:' + item.id ? 'Перевірка…' : 'Перевірити' }}
+              </button>
+              <button
+                type="button"
+                [disabled]="actionId() !== null || item.status === 'Revoked'"
+                (click)="loadModels(item)"
+              >
+                {{ actionId() === 'models:' + item.id ? 'Оновлення…' : 'Оновити моделі' }}
+              </button>
+              <button
+                class="danger-button"
+                type="button"
+                [disabled]="actionId() !== null || item.status === 'Revoked'"
+                (click)="revoke(item)"
+              >
+                {{ actionId() === 'revoke:' + item.id ? 'Відкликання…' : 'Відкликати' }}
+              </button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <div class="forms-grid">
+    <section class="panel form-card" aria-labelledby="add-provider-heading">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">New connection</p>
+          <h3 id="add-provider-heading">Додати провайдера</h3>
+        </div>
+      </div>
+      <form [formGroup]="form" (ngSubmit)="create()" novalidate>
+        <div class="field-grid">
+          <div class="field">
+            <label for="provider-kind">Провайдер</label>
+            <select id="provider-kind" formControlName="provider" (change)="providerChanged()">
+              <option value="DeterministicTest">Deterministic Test</option>
+              <option value="OpenAi">OpenAI</option>
+              <option value="XAi">xAI</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="provider-name">Назва</label>
+            <input id="provider-name" formControlName="displayName" maxlength="100" />
+          </div>
+        </div>
+
+        @if (providerRequiresApiKey()) {
+          <div class="field credential-field">
+            <label for="provider-api-key">API key</label>
+            <input
+              id="provider-api-key"
+              data-testid="create-credential"
+              formControlName="apiKey"
+              type="password"
+              autocomplete="new-password"
+              maxlength="8192"
+              aria-describedby="create-credential-help"
+            />
+            <span id="create-credential-help" class="helper-text">
+              Write-only: після збереження значення неможливо прочитати в UI.
+            </span>
+            @if (form.controls.apiKey.touched && form.controls.apiKey.invalid) {
+              <span class="field-error">Введіть API key.</span>
+            }
+          </div>
+        } @else {
+          <p class="provider-note" data-testid="deterministic-help">
+            Локальний тестовий провайдер не потребує API-ключа та не виконує платних зовнішніх
+            запитів.
+          </p>
+        }
+
+        <div class="form-actions">
+          <button class="primary-button" type="submit" [disabled]="creating()">
+            {{ creating() ? 'Додавання…' : 'Додати' }}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel form-card" aria-labelledby="replace-key-heading">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">Credential rotation</p>
+          <h3 id="replace-key-heading">Замінити API-ключ</h3>
+        </div>
+      </div>
+      <form [formGroup]="replaceForm" (ngSubmit)="replaceCredential()" novalidate>
+        <div class="field">
+          <label for="replace-connection">Підключення</label>
+          <select id="replace-connection" formControlName="connectionId">
+            <option value="">Оберіть підключення</option>
+            @for (item of replaceableConnections(); track item.id) {
+              <option [value]="item.id">
+                {{ item.displayName }} · {{ providerLabel(item.provider) }}
+              </option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="replacement-api-key">Новий API key</label>
+          <input
+            id="replacement-api-key"
+            data-testid="replacement-credential"
+            formControlName="apiKey"
+            type="password"
+            autocomplete="new-password"
+            maxlength="8192"
+            aria-describedby="replacement-credential-help"
+          />
+          <span id="replacement-credential-help" class="helper-text">
+            Поточний ключ прочитати неможливо. Нове значення повністю його замінить.
+          </span>
+        </div>
+        @if (replaceableConnections().length === 0) {
+          <p class="provider-note">Немає активних OpenAI або xAI підключень для ротації.</p>
+        }
+        <div class="form-actions">
+          <button
+            class="secondary-button replace-button"
+            data-testid="replace-credential"
+            type="submit"
+            [disabled]="replaceForm.invalid || replacing()"
+          >
+            {{ replacing() ? 'Заміна…' : 'Замінити ключ' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+</section>

@@ -87,6 +87,16 @@ services:
     networks:
       - aicontrolcenter
 
+  integrations-data-protection-init:
+    image: alpine:3.22
+    restart: "no"
+    user: "0:0"
+    command: ["sh", "-ec", "chown -R 1654:1654 /var/lib/aicontrolcenter/data-protection && chmod 700 /var/lib/aicontrolcenter/data-protection && find /var/lib/aicontrolcenter/data-protection -maxdepth 1 -type f -exec chmod 600 {} \\;"]
+    volumes:
+      - integrations_data_protection:/var/lib/aicontrolcenter/data-protection
+    networks:
+      - aicontrolcenter
+
   identity-migrations:
     <<: *dotnet-service
     restart: "no"
@@ -164,6 +174,8 @@ services:
       <<: *dotnet-environment
       ConnectionStrings__ControlPlaneDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${CONTROLPLANE_DB_USER};Password=${CONTROLPLANE_DB_PASSWORD};Search Path=control_plane"
       Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      IntegrationsGrpc__Address: http://integrations-api:8081
+      WorkerGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
     volumes:
       - type: bind
         source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
@@ -172,6 +184,8 @@ services:
     depends_on:
       controlplane-migrations:
         condition: service_completed_successfully
+      integrations-api:
+        condition: service_healthy
     ports:
       - "5102:8080"
       - "5103:8081"
@@ -210,6 +224,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__OrchestratorDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${ORCHESTRATOR_DB_USER};Password=${ORCHESTRATOR_DB_PASSWORD};Search Path=orchestrator"
       ControlPlane__GrpcAddress: http://controlplane-api:8081
+      IntegrationsGrpc__Address: http://integrations-api:8081
       RabbitMq__Host: rabbitmq
       RabbitMq__Port: 5672
       RabbitMq__Username: ${RABBITMQ_USER}
@@ -248,16 +263,45 @@ services:
       RabbitMq__Password: ${RABBITMQ_PASSWORD}
       OrchestratorGrpc__Address: http://orchestrator-api:8081
       OrchestratorGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
+      IntegrationsGrpc__Address: http://integrations-api:8081
+      IntegrationsGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
     depends_on:
       rabbitmq:
         condition: service_healthy
       orchestrator-api:
+        condition: service_healthy
+      integrations-api:
         condition: service_healthy
     ports:
       - "5106:8080"
     healthcheck:
       <<: *http-healthcheck
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+
+  integrations-migrations:
+    <<: *dotnet-service
+    restart: "no"
+    build:
+      context: .
+      dockerfile: src/Services/Integrations/AiControlCenter.Integrations.Api/Dockerfile
+    command: ["--migrate"]
+    environment:
+      <<: *dotnet-environment
+      ConnectionStrings__IntegrationsDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${INTEGRATIONS_DB_USER};Password=${INTEGRATIONS_DB_PASSWORD};Search Path=integrations"
+      Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      DataProtection__KeysPath: /var/lib/aicontrolcenter/data-protection
+      InternalGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
+    volumes:
+      - type: bind
+        source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
+        target: /run/aicontrolcenter-keys/identity-public.pem
+        read_only: true
+      - integrations_data_protection:/var/lib/aicontrolcenter/data-protection
+    depends_on:
+      postgres:
+        condition: service_healthy
+      integrations-data-protection-init:
+        condition: service_completed_successfully
 
   integrations-api:
     <<: *dotnet-service
@@ -269,19 +313,72 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__IntegrationsDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DATABASE};Username=${INTEGRATIONS_DB_USER};Password=${INTEGRATIONS_DB_PASSWORD};Search Path=integrations"
       Authentication__PublicKeyPath: /run/aicontrolcenter-keys/identity-public.pem
+      DataProtection__KeysPath: /var/lib/aicontrolcenter/data-protection
+      InternalGrpc__ApiKey: ${WORKER_GRPC_API_KEY:-}
+      ProviderConnectionFeatures__GitHubCopilotOAuthEnabled: ${GITHUB_COPILOT_OAUTH_ENABLED:-false}
+      ProviderConnectionFeatures__GitHubCopilotPatEnabled: ${GITHUB_COPILOT_PAT_ENABLED:-false}
+      ProviderConnectionFeatures__LocalCopilotCliEnabled: ${LOCAL_COPILOT_CLI_ENABLED:-false}
+      Providers__GitHub__Enabled: ${GITHUB_COPILOT_OAUTH_ENABLED:-false}
+      Providers__GitHub__ClientId: ${GITHUB_COPILOT_CLIENT_ID:-}
+      Providers__GitHub__ClientSecret: ${GITHUB_COPILOT_CLIENT_SECRET:-}
+      Providers__GitHub__CallbackUrl: ${GITHUB_COPILOT_CALLBACK_URL:-http://localhost:8080/api/integrations/v1/provider-connections/github/oauth/callback}
+      Providers__LocalCopilotCli__Enabled: ${LOCAL_COPILOT_CLI_ENABLED:-false}
+      Providers__LocalCopilotCli__Endpoint: local-copilot-cli:4321
+      Providers__LocalCopilotCli__ManagementEndpoint: http://local-copilot-cli:4322
+      Providers__LocalCopilotCli__ConnectionToken: ${LOCAL_COPILOT_CLI_CONNECTION_TOKEN:-}
+      Providers__LocalCopilotCli__OwnerUserId: ${LOCAL_COPILOT_CLI_OWNER_USER_ID:-00000000-0000-0000-0000-000000000000}
+      Providers__LocalCopilotCli__RequestTimeoutSeconds: ${LOCAL_COPILOT_CLI_REQUEST_TIMEOUT_SECONDS:-120}
     volumes:
       - type: bind
         source: ${IDENTITY_JWT_PUBLIC_KEY_PATH:-./secrets/identity/identity-public.pem}
         target: /run/aicontrolcenter-keys/identity-public.pem
         read_only: true
+      - integrations_data_protection:/var/lib/aicontrolcenter/data-protection
     depends_on:
-      postgres:
-        condition: service_healthy
+      integrations-migrations:
+        condition: service_completed_successfully
     ports:
       - "5105:8080"
     healthcheck:
       <<: *http-healthcheck
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && IFS= read -r status <&3 && [[ \"$$status\" == *\" 200 \"* ]]"]
+
+  local-copilot-cli:
+    profiles: ["local-copilot"]
+    image: aicontrolcenter-local-copilot-cli
+    build:
+      context: .
+      dockerfile: docker/copilot-cli/Dockerfile
+      args:
+        COPILOT_CLI_VERSION: "1.0.103"
+    restart: "on-failure:3"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      COPILOT_HOME: /var/lib/copilot
+      COPILOT_CONNECTION_TOKEN: ${LOCAL_COPILOT_CLI_CONNECTION_TOKEN:-}
+      COPILOT_AUTO_UPDATE: "false"
+      COPILOT_PLUGIN_DIR_ONLY: "true"
+    volumes:
+      - local_copilot_home:/var/lib/copilot
+    tmpfs:
+      - /tmp:uid=1654,gid=1654,mode=0700
+    networks:
+      - aicontrolcenter
+    healthcheck:
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/4322 &&
+          printf 'GET /health HTTP/1.0\r\nHost: localhost\r\nX-AiControlCenter-Local-Copilot-Token: %s\r\n\r\n' "$${COPILOT_CONNECTION_TOKEN}" >&3 &&
+          IFS= read -r status <&3 && [[ "$${status}" == *" 200 "* ]]
 
   postgres:
     image: postgres:17.5-alpine
@@ -328,7 +425,7 @@ services:
       - aicontrolcenter
     healthcheck:
       interval: 5s
-      timeout: 5s
+      timeout: 30s
       retries: 20
       start_period: 10s
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
@@ -344,3 +441,5 @@ volumes:
   postgres_data:
   rabbitmq_data:
   identity_data_protection:
+  integrations_data_protection:
+  local_copilot_home:

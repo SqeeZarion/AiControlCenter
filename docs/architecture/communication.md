@@ -7,6 +7,8 @@
 - Gateway передає delegated Bearer token; кожен внутрішній API повторно перевіряє JWT і власні policies.
 - Angular працює з Directions через `/api/control-plane/v1/directions`; YARP знімає prefix `/api/control-plane` і передає запит до ControlPlane `/v1/directions` разом із Bearer token.
 - Orchestrator викликає versioned `ServiceInfo` і `AgentCatalog.GetRunnableAgent` ControlPlane напряму через HTTP/2 gRPC за Docker DNS і передає Bearer token у metadata.
+- Перед створенням AI Run Orchestrator викликає `AiProviderExecution.ResolveRoutes`: Integrations резолвить глобальні логічні routes до активних connections саме власника Run і повертає trusted provider/paid binding для immutable snapshot.
+- Worker викликає `AiProviderExecution.Execute` в Integrations через окремий internal API key. Credential не входить до RabbitMQ або gRPC request: Integrations повторно перевіряє owner, expected provider і persisted connection, а потім самостійно знаходить credential.
 
 ```mermaid
 sequenceDiagram
@@ -23,17 +25,18 @@ sequenceDiagram
 
 ## RabbitMQ і MassTransit
 
-Orchestrator атомарно записує `AgentRun` і `ExecuteTestAgentRunV1`/`RunStatusChangedV1` через EF transactional bus outbox. Worker споживає command зі стабільної черги, виконує bounded Test workflow і повертає progress через gRPC. Доставка at least once; повтори нейтралізуються stable message ID, row lock та idempotent transitions.
+Orchestrator атомарно записує `AgentRun` і `ExecuteTestAgentRunV1` або `ExecuteAiAgentRunV1` разом із `RunStatusChangedV1` через EF transactional bus outbox. Worker споживає command зі стабільної черги, виконує bounded workflow і повертає steps, attempts, typed tool audit та versioned checkpoint через gRPC. Доставка at least once; повтори нейтралізуються stable message ID, row lock, idempotent transitions та durable provider execution receipt. Pending receipt після невизначеного timeout блокує blind retry і платний fallback; Resume не скидає attempt cursor і переносить підтверджені tool results.
 
 ```mermaid
 flowchart LR
     Orchestrator -->|"command + status через outbox"| RabbitMQ
-    RabbitMQ -->|"ExecuteTestAgentRunV1"| Worker
+    RabbitMQ -->|"ExecuteTestAgentRunV1 / ExecuteAiAgentRunV1"| Worker
+    Worker -->|"AiProviderExecution gRPC"| Integrations
     Worker -->|"RunProgress gRPC"| Orchestrator
     RabbitMQ -->|"RunStatusChangedV1"| Gateway
 ```
 
-Докладно: [Agents, Runs і Worker](agents-runs-worker.md#запуск-і-transactional-outbox).
+Докладно: [Agents, Runs і Worker](agents-runs-worker.md#запуск-і-transactional-outbox) та [AI-провайдери](ai-providers.md).
 
 ## SignalR
 

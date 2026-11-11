@@ -5,10 +5,12 @@
     <ProjectReference Include="..\AiControlCenter.Integrations.Infrastructure\AiControlCenter.Integrations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Observability\AiControlCenter.Observability.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Security\AiControlCenter.Security.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AiControlCenter.Grpc.Contracts\AiControlCenter.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

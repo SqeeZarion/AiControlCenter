@@ -4,6 +4,62 @@ namespace AiControlCenter.Orchestrator.UnitTests;
 
 public sealed class AgentRunTests
 {
+
+    [Fact]
+    public void PausingRunPausesItsActiveStepAndResumeCanRestartIt()
+    {
+        var run = Create();
+        run.Begin(MessageId, Now.AddSeconds(1));
+        run.ReportStep(MessageId, 1, "AI execution", RunStepStatus.Running,
+            "AI provider execution started.", Now.AddSeconds(2));
+
+        run.Pause(MessageId, AgentRunStatus.PausedProviderUnavailable,
+            "Provider unavailable.", Now.AddSeconds(3));
+
+        var step = Assert.Single(run.Steps);
+        Assert.Equal(RunStepStatus.Paused, step.Status);
+        Assert.Null(step.CompletedAt);
+        Assert.Equal(RunTransitionResult.AlreadyApplied,
+            run.Begin(MessageId, Now.AddSeconds(4)));
+        Assert.Equal(AgentRunStatus.PausedProviderUnavailable, run.Status);
+
+        var resumedMessageId = Guid.NewGuid();
+        run.Resume(resumedMessageId);
+        run.Begin(resumedMessageId, Now.AddSeconds(4));
+        run.ReportStep(resumedMessageId, 1, "AI execution", RunStepStatus.Running,
+            "AI provider execution resumed.", Now.AddSeconds(5));
+
+        Assert.Equal(RunStepStatus.Running, step.Status);
+        Assert.Null(step.CompletedAt);
+    }
+
+    [Fact]
+    public void PreGenerationUnavailableAttemptIsRetriedInPlaceAfterResume()
+    {
+        var run = Create();
+        run.Begin(MessageId, Now.AddSeconds(1));
+        run.ReportStep(MessageId, 1, "AI execution", RunStepStatus.Running, null, Now.AddSeconds(2));
+        run.RecordAttempt(MessageId, 1, "GitHubCopilotLocalCli", "Auto", "Failed",
+            "TemporarilyUnavailable", null, 0, 0, null, "auto", "first-message", 1, 0, null,
+            "Unavailable", "Unavailable", "Unknown", "TemporarilyUnavailable", null, null,
+            Now.AddSeconds(3));
+        run.Pause(MessageId, AgentRunStatus.PausedProviderUnavailable,
+            "Provider unavailable.", Now.AddSeconds(4));
+
+        Assert.Equal(0, run.AttemptOffset);
+        var resumedMessage = Guid.NewGuid();
+        run.Resume(resumedMessage);
+        run.Begin(resumedMessage, Now.AddSeconds(5));
+        run.RecordAttempt(resumedMessage, 1, "GitHubCopilotLocalCli", "Auto", "Succeeded",
+            null, "provider-request", 1, 1, null, "auto", "second-message", 1, 25, null,
+            "ProviderReported", "Unavailable", "Completed", null, null, null,
+            Now.AddSeconds(6));
+
+        var attempt = Assert.Single(run.Attempts);
+        Assert.Equal("Succeeded", attempt.Status);
+        Assert.Equal("second-message", attempt.IdempotencyKey);
+        Assert.Equal(1, run.AttemptOffset);
+    }
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid MessageId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
@@ -74,6 +130,45 @@ public sealed class AgentRunTests
         Assert.Equal(AgentRunStatus.Running, run.Status);
         Assert.Null(run.CompletedAt);
         Assert.Null(run.Error);
+    }
+
+    [Fact]
+    public void FailedCompletionAtomicallyTerminatesTheActiveStep()
+    {
+        var run = Create();
+        run.Begin(MessageId, Now.AddSeconds(1));
+        run.ReportStep(MessageId, 1, "AI execution", RunStepStatus.Running,
+            "Provider execution started.", Now.AddSeconds(2));
+
+        var result = run.Complete(MessageId, AgentRunStatus.Failed, null,
+            "SessionCreate failed before generation dispatch.", Now.AddSeconds(3));
+
+        Assert.Equal(RunTransitionResult.Applied, result);
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        var step = Assert.Single(run.Steps);
+        Assert.Equal(RunStepStatus.Failed, step.Status);
+        Assert.Equal("SessionCreate failed before generation dispatch.", step.Log);
+        Assert.Equal(Now.AddSeconds(3), step.CompletedAt);
+    }
+
+    [Fact]
+    public void PredispatchAttemptPersistsSafeDiagnosticsWithoutClaimingAnActualModel()
+    {
+        var run = Create();
+        run.Begin(MessageId, Now.AddSeconds(1));
+
+        run.RecordAttempt(MessageId, 1, "GitHubCopilotLocalCli", "Auto", "Failed",
+            "Configuration", null, 0, 0, null, null, "idempotency", 1, 170, null,
+            "Unavailable", "Unavailable", "Rejected", "Configuration", null, null,
+            Now.AddSeconds(2), "session_create_failed", "SessionCreate", "false",
+            "ProviderRuntimeException");
+
+        var attempt = Assert.Single(run.Attempts);
+        Assert.Equal("session_create_failed", attempt.ErrorCode);
+        Assert.Equal("SessionCreate", attempt.Operation);
+        Assert.Equal("false", attempt.GenerationDispatched);
+        Assert.Equal("ProviderRuntimeException", attempt.SafeExceptionType);
+        Assert.Null(attempt.ActualModel);
     }
 
     [Fact]

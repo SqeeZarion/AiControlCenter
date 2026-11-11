@@ -10,7 +10,15 @@ public sealed class AgentRunTransport(IPublishEndpoint publishEndpoint) : IRunTr
 {
     //Метод викликається після створення AgentRun. Він формує команду: та публікує її через RabbitMQ.
     public Task QueueAsync(AgentRun run, Guid messageId, CancellationToken cancellationToken) =>
-        publishEndpoint.Publish(new ExecuteTestAgentRunV1(
+        run.ExecutionType == "Ai"
+        ? publishEndpoint.Publish(new ExecuteAiAgentRunV1(
+            messageId, run.Id, run.AgentId, run.OwnerUserId, run.AgentName, run.Input,
+            run.SystemPrompt!, run.ModelRoutesJson!, run.ToolPolicyJson ?? "[]",
+            run.MaxInputTokens!.Value, run.MaxOutputTokens!.Value, run.MaxEstimatedCostUsd!.Value,
+            run.MaxAttempts, run.Attempts.Sum(attempt => attempt.EstimatedCostUsd ?? 0),
+            run.AttemptOffset, run.CheckpointJson ?? string.Empty, run.CorrelationId),
+            context => context.MessageId = messageId, cancellationToken)
+        : publishEndpoint.Publish(new ExecuteTestAgentRunV1(
             messageId, run.Id, run.AgentId, run.AgentName, run.AgentCode, run.AgentVersion,
             run.DirectionId, run.DirectionName, run.DirectionCode, run.Input,
             run.ExpectedOutcome == TestRunOutcome.Fail ? TestRunOutcomeV1.Fail : TestRunOutcomeV1.Succeed,
@@ -35,5 +43,14 @@ public sealed class AgentRunExecutionFaultConsumer(AgentRunApplicationService ru
             context.Message.Message.RunId,
             context.Message.Message.MessageId,
             "Worker could not complete the deterministic test run after bounded retries."),
+            context.CancellationToken);
+}
+
+public sealed class AiAgentRunExecutionFaultConsumer(AgentRunApplicationService runs)
+    : IConsumer<Fault<ExecuteAiAgentRunV1>>
+{
+    public Task Consume(ConsumeContext<Fault<ExecuteAiAgentRunV1>> context) =>
+        runs.FailAsync(new FailAgentRunCommand(context.Message.Message.RunId,
+            context.Message.Message.MessageId, "Worker could not complete the AI run after bounded retries."),
             context.CancellationToken);
 }

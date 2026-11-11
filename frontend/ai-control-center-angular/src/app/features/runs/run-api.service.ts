@@ -1,6 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { AgentRunDto, AgentRunListDto, RunFilters, TestRunOutcome } from './run.models';
+import {
+  AgentRunDto,
+  AgentRunListDto,
+  AgentRunPreflightDto,
+  RunFilters,
+  TestRunOutcome,
+} from './run.models';
 
 @Injectable({ providedIn: 'root' })
 export class RunApiService {
@@ -18,7 +24,21 @@ export class RunApiService {
     return this.http.get<AgentRunDto>(`${this.baseUrl}/${encodeURIComponent(id)}`);
   }
 
-  create(agentId: string, input: string, expectedOutcome: TestRunOutcome) {
-    return this.http.post<AgentRunDto>(this.baseUrl, { agentId, input, expectedOutcome });
+  create(agentId: string, input: string, expectedOutcome?: TestRunOutcome) {
+    const request =
+      expectedOutcome === undefined ? { agentId, input } : { agentId, input, expectedOutcome };
+    return this.http.post<AgentRunDto>(this.baseUrl, request);
+  }
+  resume(id: string, operationId: string) {
+    return this.http.post<AgentRunDto>(`${this.baseUrl}/${encodeURIComponent(id)}/resume`, {
+      operationId,
+    });
+  }
+
+  preflight(id: string) {
+    return this.http.post<AgentRunPreflightDto>(
+      `${this.baseUrl}/${encodeURIComponent(id)}/preflight`,
+      {},
+    );
   }
 }

@@ -1,6 +1,18 @@
-export type RunStatus = 'Queued' | 'Running' | 'Succeeded' | 'Failed';
-export type RunStepStatus = 'Running' | 'Succeeded' | 'Failed';
+export type RunStatus =
+  | 'Queued'
+  | 'Running'
+  | 'Succeeded'
+  | 'Failed'
+  | 'PausedProviderUnavailable'
+  | 'PausedInsufficientFunds'
+  | 'Cancelled';
+export type RunStepStatus = 'Running' | 'Succeeded' | 'Failed' | 'Paused';
 export type TestRunOutcome = 'Succeed' | 'Fail';
+
+export interface AgentRunPreflightDto {
+  available: boolean;
+  code: string;
+}
 
 export interface RunStepDto {
   id: string;
@@ -36,6 +48,40 @@ export interface AgentRunDto {
   result: string | null;
   error: string | null;
   steps: RunStepDto[];
+  attempts?: AiProviderAttemptDto[];
+  modelRoutesJson?: string | null;
+  maxAttempts?: number;
+  maxEstimatedCostUsd?: number | null;
+}
+
+export interface AiProviderAttemptDto {
+  id: string;
+  sequence: number;
+  provider: string;
+  model: string;
+  status: string;
+  failureKind: string | null;
+  providerRequestId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number | null;
+  actualModel: string | null;
+  idempotencyKey: string;
+  routePriority: number;
+  latencyMilliseconds: number;
+  cachedInputTokens: number | null;
+  totalTokens: number;
+  usageSource: string;
+  costSource: string;
+  finishStatus: string;
+  fallbackReason: string | null;
+  partialOutput: string | null;
+  startedAt: string;
+  completedAt: string;
+  errorCode: string | null;
+  operation: string | null;
+  generationDispatched: string | null;
+  safeExceptionType: string | null;
 }
 
 export interface AgentRunListDto {

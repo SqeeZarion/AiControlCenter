@@ -31,6 +31,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<OrchestratorApiMarker>();
 builder.Services.AddRabbitMqTransport(builder.Configuration);
 builder.Services.AddScoped<IRunTransport, AgentRunTransport>();
 builder.Services.AddScoped<IAgentCatalogClient, AgentCatalogClient>();
+builder.Services.AddScoped<IAiProviderRouteResolver, AiProviderRouteResolver>();
 builder.Services.AddSingleton<IValidateOptions<WorkerGrpcOptions>, WorkerGrpcOptionsValidator>();
 builder.Services.AddOptions<WorkerGrpcOptions>()
     .Bind(builder.Configuration.GetSection(WorkerGrpcOptions.SectionName))
@@ -46,6 +47,12 @@ builder.Services.AddGrpcClient<ServiceInfo.ServiceInfoClient>(options =>
 {
     var address = builder.Configuration["ControlPlane:GrpcAddress"]
         ?? "http://controlplane-api:8081";
+    options.Address = new Uri(address);
+});
+builder.Services.AddGrpcClient<AiProviderExecution.AiProviderExecutionClient>(options =>
+{
+    var address = builder.Configuration["IntegrationsGrpc:Address"]
+        ?? "http://integrations-api:8081";
     options.Address = new Uri(address);
 });
 builder.Services.AddEndpointsApiExplorer();

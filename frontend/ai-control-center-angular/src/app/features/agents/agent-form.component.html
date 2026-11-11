@@ -33,8 +33,218 @@
             <option value="Active">Активний</option>
             <option value="Inactive">Неактивний</option>
           </select></label
-        ><label>Тип виконання <input formControlName="executionType" readonly /></label>
+        ><label
+          >Тип виконання
+          <select formControlName="executionType">
+            <option value="Test">Test</option>
+            <option value="Ai">AI</option>
+          </select></label
+        >
       </div>
+      @if (form.controls.executionType.value === 'Ai') {
+        <label
+          >System prompt<textarea
+            formControlName="systemPrompt"
+            rows="8"
+            maxlength="16000"
+          ></textarea>
+        </label>
+        <div class="actions">
+          <span>Routing preset:</span
+          ><button
+            type="button"
+            (click)="applyPreset('GitHubOnly')"
+            [disabled]="!presetAvailable('GitHubOnly')"
+            [title]="presetUnavailableReason('GitHubOnly')"
+          >
+            GitHub only</button
+          ><button
+            type="button"
+            (click)="applyPreset('LocalCopilotCli')"
+            [disabled]="!presetAvailable('LocalCopilotCli')"
+            [title]="presetUnavailableReason('LocalCopilotCli')"
+          >
+            Local Copilot CLI</button
+          ><button
+            type="button"
+            (click)="applyPreset('OpenAIOnly')"
+            [disabled]="!presetAvailable('OpenAIOnly')"
+            [title]="presetUnavailableReason('OpenAIOnly')"
+          >
+            OpenAI only</button
+          ><button
+            type="button"
+            (click)="applyPreset('GrokOnly')"
+            [disabled]="!presetAvailable('GrokOnly')"
+            [title]="presetUnavailableReason('GrokOnly')"
+          >
+            Grok only</button
+          ><button
+            type="button"
+            (click)="applyPreset('GitHubThenOpenAI')"
+            [disabled]="!presetAvailable('GitHubThenOpenAI')"
+            [title]="presetUnavailableReason('GitHubThenOpenAI')"
+          >
+            GitHub → OpenAI</button
+          ><button
+            type="button"
+            (click)="applyPreset('GitHubThenGrok')"
+            [disabled]="!presetAvailable('GitHubThenGrok')"
+            [title]="presetUnavailableReason('GitHubThenGrok')"
+          >
+            GitHub → Grok
+          </button>
+        </div>
+        @if (routeError()) {
+          <p class="notice error" role="alert">{{ routeError() }}</p>
+        }
+        <p class="notice">
+          Вибір paid preset є явним дозволом платного execution/fallback у межах Max cost USD.
+          Оплата й поповнення виконуються тільки у провайдера.
+        </p>
+        <fieldset [formGroup]="routeForm">
+          <legend>Додати ModelRoute</legend>
+          <div class="form-row">
+            <label
+              >Connection<select formControlName="connectionId" (change)="connectionChanged()">
+                <option value="">Оберіть</option>
+                @for (connection of activeConnections(); track connection.id) {
+                  <option [value]="connection.id">
+                    {{ connection.displayName }} · {{ connection.provider }} ·
+                    {{ connectionAccount(connection) }}
+                  </option>
+                }
+              </select></label
+            ><label
+              >Model<select formControlName="modelId">
+                <option value="Auto">Auto</option>
+                @for (model of routeModels(); track model.id) {
+                  <option [value]="model.id">{{ model.displayName }}</option>
+                }
+              </select></label
+            ><label
+              >Attempts<input formControlName="maxAttempts" type="number" min="1" max="3" /></label
+            ><label
+              >Timeout, sec<input formControlName="timeoutSeconds" type="number" min="1" max="300"
+            /></label>
+            @if (selectedConnection(); as connection) {
+              <div class="state">
+                <strong>{{ connection.displayName }}</strong
+                ><br />
+                {{ connection.provider }} · {{ connectionAccount(connection) }} ·
+                {{ connection.status }}
+              </div>
+            }
+            @if (
+              selectedConnection()?.provider === 'OpenAi' ||
+              selectedConnection()?.provider === 'XAi'
+            ) {
+              <label class="checkbox-label"
+                ><input formControlName="paidExecutionAllowed" type="checkbox" /> Дозволити paid
+                execution</label
+              ><label class="checkbox-label"
+                ><input formControlName="paidFallbackAllowed" type="checkbox" /> Дозволити paid
+                fallback</label
+              ><label
+                >Run cap USD<input
+                  formControlName="safetyCapUsd"
+                  type="number"
+                  min="0.000001"
+                  step="0.01" /></label
+              ><label
+                >Daily cap USD<input
+                  formControlName="dailyCostCapUsd"
+                  type="number"
+                  min="0.000001"
+                  step="0.01" /></label
+              ><label
+                >Monthly cap USD<input
+                  formControlName="monthlyCostCapUsd"
+                  type="number"
+                  min="0.000001"
+                  step="0.01" /></label
+              ><label
+                >Requests/day<input
+                  formControlName="maxRequestsPerDay"
+                  type="number"
+                  min="1"
+                  max="1000" /></label
+              ><label
+                >Requests/month<input
+                  formControlName="maxRequestsPerMonth"
+                  type="number"
+                  min="1"
+                  max="10000"
+              /></label>
+            } @else {
+              <p class="state">Платне виконання та paid fallback для цього маршруту вимкнені.</p>
+            }
+          </div>
+          <button type="button" (click)="addRoute()">Додати route</button>
+        </fieldset>
+        <ol class="timeline">
+          @for (
+            route of routes();
+            track route.provider + ':' + route.connectionName + ':' + route.priority;
+            let index = $index
+          ) {
+            <li>
+              <strong>#{{ route.priority }} {{ route.provider }} / {{ route.modelId }}</strong>
+              <p>
+                Attempts: {{ route.maxAttempts }} · timeout: {{ route.timeoutSeconds }}s
+                @if (route.safetyCapUsd) {
+                  · cap: {{ route.safetyCapUsd }} USD
+                }
+              </p>
+              <div class="actions">
+                <button type="button" (click)="moveRoute(index, -1)" [disabled]="index === 0">
+                  ↑</button
+                ><button
+                  type="button"
+                  (click)="moveRoute(index, 1)"
+                  [disabled]="index === routes().length - 1"
+                >
+                  ↓</button
+                ><button type="button" (click)="removeRoute(index)">Видалити</button>
+              </div>
+            </li>
+          }
+        </ol>
+        <details>
+          <summary>Advanced ModelRoutes JSON</summary>
+          <label
+            >Ordered ModelRoutes (JSON)<textarea
+              formControlName="modelRoutesJson"
+              rows="8"
+            ></textarea>
+          </label>
+        </details>
+        <label
+          >Дозволені tools (JSON)<textarea
+            formControlName="toolPolicyJson"
+            rows="3"
+            placeholder='["system.utc-time"]'
+          ></textarea>
+        </label>
+        <div class="form-row">
+          <label
+            >Max input tokens<input formControlName="maxInputTokens" type="number" min="1" /></label
+          ><label
+            >Max output tokens<input
+              formControlName="maxOutputTokens"
+              type="number"
+              min="1" /></label
+          ><label
+            >Max cost USD<input
+              formControlName="maxEstimatedCostUsd"
+              type="number"
+              min="0.000001"
+              step="0.01" /></label
+          ><label
+            >Max attempts<input formControlName="maxAttempts" type="number" min="1" max="10"
+          /></label>
+        </div>
+      }
       @if (form.invalid && form.touched) {
         <small>Перевірте обов’язкові поля, довжину та формат коду.</small>
       }

@@ -105,4 +105,6 @@ docker compose down
 - [ADR: життєвий цикл Direction](docs/architecture/adr/0006-direction-lifecycle-and-access.md)
 - [Agents, Runs і Worker](docs/architecture/agents-runs-worker.md)
 - [Operations Center і live observability](docs/architecture/operations-center.md)
+- [AI-провайдери, model routing, budgets і tools](docs/architecture/ai-providers.md)
 - [ADR: AgentRun delivery та ownership](docs/architecture/adr/0007-agent-run-delivery-and-ownership.md)
+- [ADR: AI provider boundaries, fallback та secrets](docs/architecture/adr/0008-ai-provider-boundaries.md)

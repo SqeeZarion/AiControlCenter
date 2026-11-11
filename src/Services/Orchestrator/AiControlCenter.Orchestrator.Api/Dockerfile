@@ -6,6 +6,7 @@ RUN dotnet publish src/Services/Orchestrator/AiControlCenter.Orchestrator.Api/Ai
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 WORKDIR /app
+RUN apk add --no-cache krb5-libs
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=build /app/publish .

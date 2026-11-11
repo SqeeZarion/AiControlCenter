@@ -47,6 +47,35 @@
       @if (item.error) {
         <p class="notice error">{{ item.error }}</p>
       }
+      @if (
+        item.status === 'PausedProviderUnavailable' || item.status === 'PausedInsufficientFunds'
+      ) {
+        @if (resumeBlockCode() !== null) {
+          <p class="notice warning">Результат попереднього запиту невідомий</p>
+          <p class="notice error">
+            Повторне виконання цього Run заблоковано для запобігання подвійному списанню
+          </p>
+          <p class="state">
+            Рекомендовано створити новий Run; історичний attempt і receipt не будуть перенесені.
+          </p>
+          <a class="primary" routerLink="/agents">Створити новий Run</a>
+        } @else {
+          <button
+            class="primary"
+            type="button"
+            [disabled]="!resumeReady() || resumePending()"
+            (click)="resume()"
+          >
+            {{
+              resumePending()
+                ? 'Запит на продовження…'
+                : preflightChecking()
+                  ? 'Перевірка провайдера…'
+                  : 'Продовжити Run'
+            }}
+          </button>
+        }
+      }
     </article>
     <h3 class="section-title">Кроки</h3>
     @if (item.steps.length === 0) {
@@ -63,6 +92,50 @@
             </div>
             <p>{{ step.log || 'Журнал порожній.' }}</p>
             <small>{{ formatDate(step.updatedAt) }}</small>
+          </li>
+        }
+      </ol>
+    }
+    @if ((item.attempts ?? []).length > 0) {
+      <h3 class="section-title">AI provider attempts</h3>
+      <ol class="timeline">
+        @for (attempt of item.attempts ?? []; track attempt.id) {
+          <li>
+            <div>
+              <strong
+                >{{ attempt.sequence }}. {{ attempt.provider }} · Requested: {{ attempt.model }} ·
+                Actual: {{ attempt.actualModel || 'not reported' }}</strong
+              ><span class="badge" [class.active]="attempt.status === 'Succeeded'">{{
+                attempt.status
+              }}</span>
+            </div>
+            <p>
+              Route #{{ attempt.routePriority }} · Tokens: input
+              {{ usageValue(attempt.inputTokens, attempt.usageSource) }}, cached
+              {{ usageValue(attempt.cachedInputTokens, attempt.usageSource) }}, output
+              {{ usageValue(attempt.outputTokens, attempt.usageSource) }}, total
+              {{ usageValue(attempt.totalTokens, attempt.usageSource) }} ({{ attempt.usageSource }})
+              · Cost: {{ costValue(attempt.estimatedCostUsd, attempt.costSource) }} ({{
+                attempt.costSource
+              }}) · {{ attempt.latencyMilliseconds }} ms
+            </p>
+            <p>
+              Operation: <code>{{ attempt.operation || 'not reported' }}</code> · Safe code:
+              <code>{{ attempt.errorCode || 'not reported' }}</code> · Generation dispatched:
+              {{ generationDispatchedLabel(attempt.generationDispatched) }}
+            </p>
+            @if (attemptDiagnosticMessage(attempt)) {
+              <p class="notice error">{{ attemptDiagnosticMessage(attempt) }}</p>
+            }
+            @if (attempt.partialOutput) {
+              <p>Partial output: {{ attempt.partialOutput }}</p>
+            }
+            <small>{{
+              attempt.fallbackReason ||
+                attempt.failureKind ||
+                attempt.providerRequestId ||
+                attempt.finishStatus
+            }}</small>
           </li>
         }
       </ol>

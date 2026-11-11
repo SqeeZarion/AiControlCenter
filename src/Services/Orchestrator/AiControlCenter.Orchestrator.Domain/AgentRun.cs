@@ -1,3 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace AiControlCenter.Orchestrator.Domain;
 
 public enum AgentRunStatus
@@ -6,6 +11,9 @@ public enum AgentRunStatus
     Running = 1,
     Succeeded = 2,
     Failed = 3,
+    PausedProviderUnavailable = 4,
+    PausedInsufficientFunds = 5,
+    Cancelled = 6,
 }
 
 public enum RunStepStatus
@@ -13,6 +21,7 @@ public enum RunStepStatus
     Running = 0,
     Succeeded = 1,
     Failed = 2,
+    Paused = 3,
 }
 
 public enum TestRunOutcome
@@ -37,8 +46,10 @@ public sealed class AgentRun
     public const int ResultMaxLength = 4000;
     public const int ErrorMaxLength = 1000;
     public const int MaximumSteps = 16;
+    public const int CheckpointJsonMaxLength = 65_536;
 
     private readonly List<RunStep> _steps = [];
+    private readonly List<AiProviderAttempt> _attempts = [];
 
     private AgentRun()
     {
@@ -66,9 +77,16 @@ public sealed class AgentRun
         DirectionName = RequireBounded(snapshot.DirectionName, NameMaxLength, nameof(snapshot.DirectionName));
         DirectionCode = RequireBounded(snapshot.DirectionCode, CodeMaxLength, nameof(snapshot.DirectionCode));
         DirectionVersion = RequireVersion(snapshot.DirectionVersion, nameof(snapshot.DirectionVersion));
-        ExecutionType = snapshot.ExecutionType == "Test"
+        ExecutionType = snapshot.ExecutionType is "Test" or "Ai"
             ? snapshot.ExecutionType
-            : throw new ArgumentException("Only Test execution is supported.", nameof(snapshot));
+            : throw new ArgumentException("Unknown execution type.", nameof(snapshot));
+        SystemPrompt = snapshot.SystemPrompt;
+        ModelRoutesJson = snapshot.ModelRoutesJson;
+        ToolPolicyJson = snapshot.ToolPolicyJson;
+        MaxInputTokens = snapshot.MaxInputTokens;
+        MaxOutputTokens = snapshot.MaxOutputTokens;
+        MaxEstimatedCostUsd = snapshot.MaxEstimatedCostUsd;
+        MaxAttempts = snapshot.MaxAttempts;
         Input = OptionalBounded(input, InputMaxLength, nameof(input)) ?? string.Empty;
         ExpectedOutcome = Enum.IsDefined(expectedOutcome)
             ? expectedOutcome
@@ -91,6 +109,13 @@ public sealed class AgentRun
     public string DirectionCode { get; private set; } = string.Empty;
     public long DirectionVersion { get; private set; }
     public string ExecutionType { get; private set; } = string.Empty;
+    public string? SystemPrompt { get; private set; }
+    public string? ModelRoutesJson { get; private set; }
+    public string? ToolPolicyJson { get; private set; }
+    public int? MaxInputTokens { get; private set; }
+    public int? MaxOutputTokens { get; private set; }
+    public decimal? MaxEstimatedCostUsd { get; private set; }
+    public int MaxAttempts { get; private set; } = 1;
     public string Input { get; private set; } = string.Empty;
     public TestRunOutcome ExpectedOutcome { get; private set; }
     public AgentRunStatus Status { get; private set; }
@@ -101,8 +126,105 @@ public sealed class AgentRun
     public DateTimeOffset? CompletedAt { get; private set; }
     public string? Result { get; private set; }
     public string? Error { get; private set; }
+    public string? CheckpointJson { get; private set; }
+    public int CheckpointVersion { get; private set; }
+    public string? CheckpointHash { get; private set; }
+    public DateTimeOffset? CheckpointUpdatedAt { get; private set; }
     public uint Version { get; private set; }
     public IReadOnlyCollection<RunStep> Steps => _steps.AsReadOnly();
+    public IReadOnlyCollection<AiProviderAttempt> Attempts => _attempts.AsReadOnly();
+    public int AttemptOffset => _attempts.LastOrDefault()?.CanRetryWithoutNewSequence == true
+        ? _attempts.Count - 1 : _attempts.Count;
+
+    public RunTransitionResult RecordAttempt(Guid messageId, int sequence, string provider, string model,
+        string status, string? failureKind, string? providerRequestId, int inputTokens, int outputTokens,
+        decimal? estimatedCostUsd, string? actualModel, string idempotencyKey, int routePriority,
+        long latencyMilliseconds, int? cachedInputTokens, string usageSource, string costSource,
+        string finishStatus, string? fallbackReason, string? partialOutput, string? checkpointJson,
+        DateTimeOffset now, string? errorCode = null, string? operation = null,
+        string? generationDispatched = null, string? safeExceptionType = null)
+    {
+        EnsureExecution(messageId);
+        if (routePriority <= 0 || latencyMilliseconds < 0 || inputTokens < 0 || outputTokens < 0
+            || cachedInputTokens < 0 || cachedInputTokens > inputTokens || estimatedCostUsd < 0)
+            throw new AgentRunRuleViolationException("Attempt metrics are invalid.");
+        if (usageSource is not ("ProviderReported" or "Estimated" or "Unavailable")
+            || costSource is not ("ProviderReported" or "Estimated" or "Unavailable"))
+            throw new AgentRunRuleViolationException("Attempt metric source is invalid.");
+        var existing = _attempts.SingleOrDefault(x => x.Sequence == sequence);
+        if (existing is not null)
+        {
+            if (!existing.CanRetryWithoutNewSequence) return RunTransitionResult.AlreadyApplied;
+            existing.ReplaceRetry(provider, model, actualModel, status, failureKind,
+                providerRequestId, inputTokens, cachedInputTokens, outputTokens,
+                estimatedCostUsd, idempotencyKey, routePriority, latencyMilliseconds,
+                usageSource, costSource, finishStatus, fallbackReason, partialOutput,
+                errorCode, operation, generationDispatched, safeExceptionType, now);
+            if (!string.IsNullOrWhiteSpace(checkpointJson)) ApplyCheckpoint(checkpointJson, sequence, now);
+            Revision++;
+            return RunTransitionResult.Applied;
+        }
+        if (sequence != _attempts.Count + 1 || sequence > MaxAttempts)
+            throw new AgentRunRuleViolationException("Invalid attempt sequence.");
+        _attempts.Add(AiProviderAttempt.Create(Guid.NewGuid(), Id, OwnerUserId, sequence, provider, model,
+            actualModel, status, failureKind, providerRequestId, inputTokens, cachedInputTokens,
+            outputTokens, estimatedCostUsd, idempotencyKey, routePriority, CorrelationId,
+            latencyMilliseconds, usageSource, costSource, finishStatus, fallbackReason, partialOutput,
+            errorCode, operation, generationDispatched, safeExceptionType, now));
+        if (!string.IsNullOrWhiteSpace(checkpointJson)) ApplyCheckpoint(checkpointJson, sequence, now);
+        Revision++; return RunTransitionResult.Applied;
+    }
+
+    private void ApplyCheckpoint(string checkpointJson, int sequence, DateTimeOffset now)
+    {
+        if (Encoding.UTF8.GetByteCount(checkpointJson) > CheckpointJsonMaxLength)
+            throw new AgentRunRuleViolationException("Checkpoint exceeds the allowed size.");
+        JsonNode root;
+        try { root = JsonNode.Parse(checkpointJson) ?? throw new JsonException(); }
+        catch (JsonException) { throw new AgentRunRuleViolationException("Checkpoint JSON is malformed."); }
+        if (root["schemaVersion"]?.GetValue<int>() != 1
+            || root["checkpointVersion"]?.GetValue<int>() is not int version
+            || version <= CheckpointVersion
+            || root["resumeCursor"]?.GetValue<int>() != sequence
+            || root["hash"]?.GetValue<string>() is not string hash
+            || hash.Length != 64 || hash.Any(character => !Uri.IsHexDigit(character)))
+            throw new AgentRunRuleViolationException("Checkpoint metadata is invalid.");
+        var unsigned = root.DeepClone();
+        unsigned.AsObject().Remove("hash");
+        var expectedHash = Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(unsigned.ToJsonString()))).ToLowerInvariant();
+        if (!CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(hash), Encoding.ASCII.GetBytes(expectedHash)))
+            throw new AgentRunRuleViolationException("Checkpoint integrity check failed.");
+        var routeSnapshot = root["routeSnapshot"];
+        if (routeSnapshot is null || ModelRoutesJson is null
+            || !JsonNode.DeepEquals(routeSnapshot, JsonNode.Parse(ModelRoutesJson)))
+            throw new AgentRunRuleViolationException("Checkpoint route snapshot does not match the immutable run snapshot.");
+        CheckpointJson = checkpointJson;
+        CheckpointVersion = version;
+        CheckpointHash = hash;
+        CheckpointUpdatedAt = now.ToUniversalTime();
+    }
+
+    public RunTransitionResult Pause(Guid messageId, AgentRunStatus pausedStatus, string reason, DateTimeOffset now)
+    {
+        EnsureExecution(messageId);
+        if (pausedStatus is not (AgentRunStatus.PausedProviderUnavailable or AgentRunStatus.PausedInsufficientFunds))
+            throw new AgentRunRuleViolationException("Invalid paused status.");
+        if (Status == pausedStatus) return RunTransitionResult.AlreadyApplied;
+        if (Status != AgentRunStatus.Running) throw new AgentRunRuleViolationException("Only a running run can pause.");
+        var activeStep = _steps.SingleOrDefault(step => step.Status == RunStepStatus.Running);
+        activeStep?.Apply(activeStep.Name, RunStepStatus.Paused, reason, now);
+        Status = pausedStatus; Error = RequireBounded(reason, ErrorMaxLength, nameof(reason)); Revision++; return RunTransitionResult.Applied;
+    }
+
+    public RunTransitionResult Resume(Guid newMessageId)
+    {
+        RequireId(newMessageId, nameof(newMessageId));
+        if (Status is not (AgentRunStatus.PausedProviderUnavailable or AgentRunStatus.PausedInsufficientFunds))
+            throw new AgentRunRuleViolationException("Only a paused run can resume.");
+        Status = AgentRunStatus.Queued; ExecutionMessageId = newMessageId; StartedAt = null; Error = null; Revision++; return RunTransitionResult.Applied;
+    }
 
     public static AgentRun Create(
         Guid id,
@@ -120,7 +242,8 @@ public sealed class AgentRun
         RequireId(messageId, nameof(messageId));
         if (ExecutionMessageId is not null && ExecutionMessageId != messageId)
             throw new AgentRunRuleViolationException("Run is already owned by another execution message.");
-        if (Status is AgentRunStatus.Running or AgentRunStatus.Succeeded or AgentRunStatus.Failed)
+        if (Status is AgentRunStatus.Running or AgentRunStatus.Succeeded or AgentRunStatus.Failed
+            or AgentRunStatus.PausedProviderUnavailable or AgentRunStatus.PausedInsufficientFunds)
             return RunTransitionResult.AlreadyApplied;
 
         var timestamp = RequireAtOrAfter(now, CreatedAt, nameof(now));
@@ -198,6 +321,11 @@ public sealed class AgentRun
         if (terminalStatus == AgentRunStatus.Failed && normalizedError is null)
             throw new AgentRunRuleViolationException("A failed run requires an error reason.");
         var timestamp = RequireAtOrAfter(now, LatestAppliedAt(), nameof(now));
+        if (terminalStatus == AgentRunStatus.Failed)
+        {
+            var activeStep = _steps.SingleOrDefault(step => step.Status == RunStepStatus.Running);
+            activeStep?.Apply(activeStep.Name, RunStepStatus.Failed, normalizedError, timestamp);
+        }
         Status = terminalStatus;
         Result = normalizedResult;
         Error = normalizedError;
@@ -287,7 +415,141 @@ public sealed record AgentSnapshot(
     Guid DirectionId,
     string DirectionName,
     string DirectionCode,
-    long DirectionVersion);
+    long DirectionVersion,
+    string? SystemPrompt = null,
+    string? ModelRoutesJson = null,
+    string? ToolPolicyJson = null,
+    int? MaxInputTokens = null,
+    int? MaxOutputTokens = null,
+    decimal? MaxEstimatedCostUsd = null,
+    int MaxAttempts = 1);
+
+public sealed class AiProviderAttempt
+{
+    private AiProviderAttempt() { }
+    private AiProviderAttempt(Guid id, Guid runId, Guid ownerUserId, int sequence, string provider,
+        string model, string? actualModel, string status, string? failureKind, string? requestId,
+        int inputTokens, int? cachedInputTokens, int outputTokens, decimal? cost, string idempotencyKey,
+        int routePriority, string correlationId, long latencyMilliseconds, string usageSource,
+        string costSource, string finishStatus, string? fallbackReason, string? partialOutput,
+        string? errorCode, string? operation, string? generationDispatched,
+        string? safeExceptionType, DateTimeOffset now)
+    {
+        Id = id; AgentRunId = runId; OwnerUserId = ownerUserId; Sequence = sequence;
+        Provider = AgentRun.RequireBounded(provider, 32, nameof(provider));
+        Model = AgentRun.RequireBounded(model, 128, nameof(model));
+        ActualModel = AgentRun.OptionalBounded(actualModel, 128, nameof(actualModel));
+        Status = AgentRun.RequireBounded(status, 32, nameof(status));
+        FailureKind = AgentRun.OptionalBounded(failureKind, 64, nameof(failureKind));
+        ProviderRequestId = AgentRun.OptionalBounded(requestId, 256, nameof(requestId));
+        InputTokens = inputTokens; CachedInputTokens = cachedInputTokens;
+        OutputTokens = outputTokens; TotalTokens = inputTokens + outputTokens; EstimatedCostUsd = cost;
+        IdempotencyKey = AgentRun.RequireBounded(idempotencyKey, 160, nameof(idempotencyKey));
+        RoutePriority = routePriority;
+        CorrelationId = AgentRun.RequireBounded(correlationId, AgentRun.CorrelationIdMaxLength, nameof(correlationId));
+        LatencyMilliseconds = latencyMilliseconds; UsageSource = usageSource; CostSource = costSource;
+        FinishStatus = AgentRun.RequireBounded(finishStatus, 32, nameof(finishStatus));
+        FallbackReason = AgentRun.OptionalBounded(fallbackReason, 64, nameof(fallbackReason));
+        PartialOutput = AgentRun.OptionalBounded(partialOutput, AgentRun.ResultMaxLength, nameof(partialOutput));
+        ErrorCode = AgentRun.OptionalBounded(errorCode, 128, nameof(errorCode));
+        Operation = AgentRun.OptionalBounded(operation, 64, nameof(operation));
+        GenerationDispatched = NormalizeGenerationDispatched(generationDispatched);
+        SafeExceptionType = AgentRun.OptionalBounded(safeExceptionType, 128, nameof(safeExceptionType));
+        CompletedAt = now.ToUniversalTime(); StartedAt = CompletedAt.AddMilliseconds(-latencyMilliseconds);
+    }
+    public Guid Id { get; private set; }
+    public Guid AgentRunId { get; private set; }
+    public Guid OwnerUserId { get; private set; }
+    public int Sequence { get; private set; }
+    public string Provider { get; private set; } = string.Empty;
+    public string Model { get; private set; } = string.Empty;
+    public string? ActualModel { get; private set; }
+    public string Status { get; private set; } = string.Empty;
+    public string? FailureKind { get; private set; }
+    public string? ProviderRequestId { get; private set; }
+    public int InputTokens { get; private set; }
+    public int? CachedInputTokens { get; private set; }
+    public int OutputTokens { get; private set; }
+    public int TotalTokens { get; private set; }
+    public decimal? EstimatedCostUsd { get; private set; }
+    public string IdempotencyKey { get; private set; } = string.Empty;
+    public int RoutePriority { get; private set; }
+    public string CorrelationId { get; private set; } = string.Empty;
+    public long LatencyMilliseconds { get; private set; }
+    public int RequestCount { get; private set; } = 1;
+    public string UsageSource { get; private set; } = string.Empty;
+    public string CostSource { get; private set; } = string.Empty;
+    public string FinishStatus { get; private set; } = string.Empty;
+    public string? FallbackReason { get; private set; }
+    public string? PartialOutput { get; private set; }
+    public string? ErrorCode { get; private set; }
+    public string? Operation { get; private set; }
+    public string? GenerationDispatched { get; private set; }
+    public string? SafeExceptionType { get; private set; }
+    public DateTimeOffset StartedAt { get; private set; }
+    public DateTimeOffset CompletedAt { get; private set; }
+    public bool CanRetryWithoutNewSequence => Status == "Failed"
+        && FailureKind == "TemporarilyUnavailable"
+        && ProviderRequestId is null
+        && InputTokens == 0 && OutputTokens == 0
+        && EstimatedCostUsd is null
+        && LatencyMilliseconds == 0;
+    public static AiProviderAttempt Create(Guid id, Guid runId, Guid ownerUserId, int sequence,
+        string provider, string model, string? actualModel, string status, string? failureKind,
+        string? requestId, int inputTokens, int? cachedInputTokens, int outputTokens, decimal? cost,
+        string idempotencyKey, int routePriority, string correlationId, long latencyMilliseconds,
+        string usageSource, string costSource, string finishStatus, string? fallbackReason,
+        string? partialOutput, string? errorCode, string? operation, string? generationDispatched,
+        string? safeExceptionType, DateTimeOffset now) => new(id, runId, ownerUserId, sequence, provider,
+            model, actualModel, status, failureKind, requestId, inputTokens, cachedInputTokens,
+            outputTokens, cost, idempotencyKey, routePriority, correlationId, latencyMilliseconds,
+            usageSource, costSource, finishStatus, fallbackReason, partialOutput,
+            errorCode, operation, generationDispatched, safeExceptionType, now);
+
+    internal void ReplaceRetry(string provider, string model, string? actualModel,
+        string status, string? failureKind, string? requestId, int inputTokens,
+        int? cachedInputTokens, int outputTokens, decimal? cost, string idempotencyKey,
+        int routePriority, long latencyMilliseconds, string usageSource, string costSource,
+        string finishStatus, string? fallbackReason, string? partialOutput,
+        string? errorCode, string? operation, string? generationDispatched,
+        string? safeExceptionType, DateTimeOffset now)
+    {
+        if (!CanRetryWithoutNewSequence)
+            throw new AgentRunRuleViolationException("Only a pre-generation unavailable attempt can be retried in place.");
+        Provider = AgentRun.RequireBounded(provider, 32, nameof(provider));
+        Model = AgentRun.RequireBounded(model, 128, nameof(model));
+        ActualModel = AgentRun.OptionalBounded(actualModel, 128, nameof(actualModel));
+        Status = AgentRun.RequireBounded(status, 32, nameof(status));
+        FailureKind = AgentRun.OptionalBounded(failureKind, 64, nameof(failureKind));
+        ProviderRequestId = AgentRun.OptionalBounded(requestId, 256, nameof(requestId));
+        InputTokens = inputTokens;
+        CachedInputTokens = cachedInputTokens;
+        OutputTokens = outputTokens;
+        TotalTokens = inputTokens + outputTokens;
+        EstimatedCostUsd = cost;
+        IdempotencyKey = AgentRun.RequireBounded(idempotencyKey, 160, nameof(idempotencyKey));
+        RoutePriority = routePriority;
+        LatencyMilliseconds = latencyMilliseconds;
+        UsageSource = AgentRun.RequireBounded(usageSource, 24, nameof(usageSource));
+        CostSource = AgentRun.RequireBounded(costSource, 24, nameof(costSource));
+        FinishStatus = AgentRun.RequireBounded(finishStatus, 32, nameof(finishStatus));
+        FallbackReason = AgentRun.OptionalBounded(fallbackReason, 64, nameof(fallbackReason));
+        PartialOutput = AgentRun.OptionalBounded(partialOutput, AgentRun.ResultMaxLength, nameof(partialOutput));
+        ErrorCode = AgentRun.OptionalBounded(errorCode, 128, nameof(errorCode));
+        Operation = AgentRun.OptionalBounded(operation, 64, nameof(operation));
+        GenerationDispatched = NormalizeGenerationDispatched(generationDispatched);
+        SafeExceptionType = AgentRun.OptionalBounded(safeExceptionType, 128, nameof(safeExceptionType));
+        CompletedAt = now.ToUniversalTime();
+        StartedAt = CompletedAt.AddMilliseconds(-latencyMilliseconds);
+    }
+
+    private static string? NormalizeGenerationDispatched(string? value) => value switch
+    {
+        null => null,
+        "true" or "false" or "unknown" => value,
+        _ => throw new AgentRunRuleViolationException("Generation dispatch state is invalid."),
+    };
+}
 
 public sealed class RunStep
 {
@@ -339,9 +601,19 @@ public sealed class RunStep
         }
         if (status == RunStepStatus.Running)
         {
-            if (string.Equals(Log, log, StringComparison.Ordinal)) return false;
+            if (Status == RunStepStatus.Running && string.Equals(Log, log, StringComparison.Ordinal)) return false;
+            Status = RunStepStatus.Running;
             Log = log;
             UpdatedAt = timestamp;
+            return true;
+        }
+
+        if (status == RunStepStatus.Paused)
+        {
+            Status = status;
+            Log = log;
+            UpdatedAt = timestamp;
+            CompletedAt = null;
             return true;
         }
 

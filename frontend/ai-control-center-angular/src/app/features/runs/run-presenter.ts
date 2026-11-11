@@ -6,6 +6,10 @@ const statusLabels: Record<RunStatus | RunStepStatus, string> = {
   Running: 'Виконується',
   Succeeded: 'Успішно',
   Failed: 'Помилка',
+  Paused: 'Призупинено',
+  PausedProviderUnavailable: 'Провайдер недоступний',
+  PausedInsufficientFunds: 'Недостатньо коштів',
+  Cancelled: 'Скасовано',
 };
 
 export function runStatusLabel(status: RunStatus | RunStepStatus): string {

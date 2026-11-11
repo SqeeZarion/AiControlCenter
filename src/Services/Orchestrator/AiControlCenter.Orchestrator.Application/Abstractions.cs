@@ -37,6 +37,23 @@ public interface IAgentCatalogClient
         CancellationToken cancellationToken);
 }
 
+public interface IAiProviderRouteResolver
+{
+    Task<string> ResolveAsync(
+        Guid ownerUserId,
+        string logicalRoutesJson,
+        CancellationToken cancellationToken);
+    Task<bool> PreflightAsync(
+        Guid ownerUserId,
+        string resolvedRoutesJson,
+        CancellationToken cancellationToken);
+    Task<AgentRunResumeSafetyDto> InspectResumeSafetyAsync(
+        Guid ownerUserId,
+        string provider,
+        string idempotencyKey,
+        CancellationToken cancellationToken);
+}
+
 public interface IRunTransport
 {
     Task QueueAsync(AgentRun run, Guid messageId, CancellationToken cancellationToken);

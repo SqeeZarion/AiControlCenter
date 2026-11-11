@@ -85,6 +85,9 @@ public sealed class OrchestratorRunTests : IAsyncLifetime
                     .AddInterceptors(runLockBarrier));
                 services.RemoveAll<IAgentCatalogClient>();
                 services.AddSingleton<IAgentCatalogClient, RunnableAgentCatalog>();
+                services.RemoveAll<IAiProviderRouteResolver>();
+                services.AddSingleton<IAiProviderRouteResolver, PassThroughRouteResolver>();
+                services.Configure<MassTransitHostOptions>(options => options.WaitUntilStarted = true);
             }));
     }
 
@@ -112,6 +115,85 @@ public sealed class OrchestratorRunTests : IAsyncLifetime
         Assert.Equal("test-agent", consumed.AgentCode);
         Assert.DoesNotContain("Bearer", JsonSerializer.Serialize(consumed), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM orchestrator.\"OutboxMessage\""));
+    }
+
+    [Fact]
+    public async Task PersistedExecutionTypeControlsAiPromptAndRejectsForgedTestBypass()
+    {
+        await ClearAsync();
+        using var client = CreateClient("User", OwnerId);
+
+        using var aiResponse = await client.PostAsJsonAsync("/v1/runs", new
+        {
+            agentId = RunnableAgentCatalog.AiAgentId,
+            input = "Explain the current system state",
+            executionType = "Test",
+        });
+        Assert.True(aiResponse.StatusCode == HttpStatusCode.Accepted,
+            await aiResponse.Content.ReadAsStringAsync());
+        var aiRun = (await aiResponse.Content.ReadFromJsonAsync<AgentRunDto>(WebJson))!;
+        Assert.Equal("Ai", aiRun.ExecutionType);
+        Assert.Equal("Explain the current system state", aiRun.Input);
+        Assert.Equal(TestRunOutcome.Succeed, aiRun.ExpectedOutcome);
+
+        using var forgedTestResponse = await client.PostAsJsonAsync("/v1/runs", new
+        {
+            agentId = RunnableAgentCatalog.AgentId,
+            input = "Attempt to bypass deterministic requirements",
+            executionType = "Ai",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, forgedTestResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task LegacyLocalCopilotOutcomeBlocksPreflightAndForgedResumeButNotANewRun()
+    {
+        await ClearAsync();
+        using var client = CreateClient("User", OwnerId);
+        var now = DateTimeOffset.UtcNow;
+        var messageId = Guid.NewGuid();
+        var legacy = AgentRun.Create(Guid.NewGuid(), RunnableAgentCatalog.AiAgentId, OwnerId,
+            "legacy-ambiguous-correlation", RunnableAgentCatalog.AiSnapshot,
+            "legacy ambiguous input", TestRunOutcome.Succeed, now);
+        legacy.Begin(messageId, now.AddSeconds(1));
+        legacy.ReportStep(messageId, 1, "AI execution", RunStepStatus.Running, null,
+            now.AddSeconds(2));
+        legacy.RecordAttempt(messageId, 1, "GitHubCopilotLocalCli", "Auto", "Failed",
+            "TemporarilyUnavailable", null, 0, 0, null, "auto",
+            "legacy-local-cli-receipt", 1, 0, null, "Unavailable", "Unavailable",
+            "Unknown", "TemporarilyUnavailable", null, null, now.AddSeconds(3));
+        legacy.Pause(messageId, AgentRunStatus.PausedProviderUnavailable,
+            "The configured provider route is currently unavailable.", now.AddSeconds(4));
+        await using (var seed = CreateDbContext())
+        {
+            seed.AgentRuns.Add(legacy);
+            await seed.SaveChangesAsync();
+        }
+
+        var preflight = await client.PostAsync($"/v1/runs/{legacy.Id}/preflight", null);
+        preflight.EnsureSuccessStatusCode();
+        var preflightResult = (await preflight.Content.ReadFromJsonAsync<AgentRunPreflightDto>(WebJson))!;
+        Assert.False(preflightResult.Available);
+        Assert.Equal("LegacyAmbiguousOutcome", preflightResult.Code);
+
+        using var forgedResume = await client.PostAsJsonAsync($"/v1/runs/{legacy.Id}/resume", new
+        {
+            operationId = Guid.NewGuid(),
+        });
+        Assert.Equal(HttpStatusCode.Conflict, forgedResume.StatusCode);
+        using var problem = JsonDocument.Parse(await forgedResume.Content.ReadAsStringAsync());
+        Assert.Equal("LegacyAmbiguousOutcome", problem.RootElement.GetProperty("code").GetString());
+
+        using var newRunResponse = await client.PostAsJsonAsync("/v1/runs", new
+        {
+            agentId = RunnableAgentCatalog.AiAgentId,
+            input = "new independent run",
+        });
+        Assert.Equal(HttpStatusCode.Accepted, newRunResponse.StatusCode);
+        var newRun = (await newRunResponse.Content.ReadFromJsonAsync<AgentRunDto>(WebJson))!;
+        Assert.NotEqual(legacy.Id, newRun.Id);
+        Assert.Empty(newRun.Attempts);
+        Assert.Null(newRun.CheckpointJson);
     }
 
     [Fact]
@@ -514,7 +596,7 @@ public sealed class OrchestratorRunTests : IAsyncLifetime
     private async Task ClearAsync()
     {
         await using var connection = new NpgsqlConnection(postgres.GetConnectionString()); await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("TRUNCATE orchestrator.run_steps, orchestrator.agent_runs, orchestrator.\"OutboxMessage\", orchestrator.\"InboxState\", orchestrator.\"OutboxState\" RESTART IDENTITY", connection); await command.ExecuteNonQueryAsync();
+        await using var command = new NpgsqlCommand("TRUNCATE orchestrator.ai_provider_attempts, orchestrator.run_steps, orchestrator.agent_runs, orchestrator.\"OutboxMessage\", orchestrator.\"InboxState\", orchestrator.\"OutboxState\" RESTART IDENTITY", connection); await command.ExecuteNonQueryAsync();
     }
     private async Task<T?> ScalarAsync<T>(string sql)
     {
@@ -642,12 +724,47 @@ public sealed class OrchestratorRunTests : IAsyncLifetime
     private sealed class RunnableAgentCatalog : IAgentCatalogClient
     {
         public static readonly Guid AgentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        public static readonly Guid AiAgentId = Guid.Parse("bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
         public static readonly AgentSnapshot Snapshot = new("Test Agent", "test-agent", "Deterministic", 2, "Test", Guid.Parse("11111111-2222-3333-4444-555555555555"), "Direction", "direction", 3);
+        public static readonly AgentSnapshot AiSnapshot = new(
+            "AI Agent", "ai-agent", "AI", 5, "Ai",
+            Guid.Parse("11111111-2222-3333-4444-555555555555"), "Direction", "direction", 3,
+            "Use a bounded provider route.",
+            "[{\"provider\":\"LocalCopilotCli\",\"connectionId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"modelId\":\"Auto\",\"priority\":1}]",
+            "[]", 500, 250, 1m, 1);
+
         public Task<AgentSnapshot> GetRunnableAgentAsync(Guid agentId, string delegatedAuthorization, CancellationToken cancellationToken)
         {
             Assert.StartsWith("Bearer ", delegatedAuthorization, StringComparison.OrdinalIgnoreCase);
-            if (agentId != AgentId) throw new AgentRunAgentNotFoundException(agentId);
-            return Task.FromResult(Snapshot);
+            return agentId switch
+            {
+                var id when id == AgentId => Task.FromResult(Snapshot),
+                var id when id == AiAgentId => Task.FromResult(AiSnapshot),
+                _ => throw new AgentRunAgentNotFoundException(agentId),
+            };
         }
+    }
+
+    private sealed class PassThroughRouteResolver : IAiProviderRouteResolver
+    {
+        public Task<string> ResolveAsync(
+            Guid ownerUserId,
+            string logicalRoutesJson,
+            CancellationToken cancellationToken) => Task.FromResult(logicalRoutesJson);
+
+        public Task<bool> PreflightAsync(
+            Guid ownerUserId,
+            string resolvedRoutesJson,
+            CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<AgentRunResumeSafetyDto> InspectResumeSafetyAsync(
+            Guid ownerUserId,
+            string provider,
+            string idempotencyKey,
+            CancellationToken cancellationToken) => Task.FromResult(
+                idempotencyKey == "legacy-local-cli-receipt"
+                    ? new AgentRunResumeSafetyDto(false, "LegacyAmbiguousOutcome")
+                    : new AgentRunResumeSafetyDto(true, "Allowed"));
+
     }
 }

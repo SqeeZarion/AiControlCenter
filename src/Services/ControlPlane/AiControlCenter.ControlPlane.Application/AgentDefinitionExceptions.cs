@@ -13,3 +13,14 @@ public sealed class AgentDirectionNotFoundException(Guid id)
 
 public sealed class AgentNotRunnableException(string message)
     : AgentDefinitionApplicationException(message);
+
+public sealed class AgentModelRouteValidationException(
+    string code,
+    string field,
+    string message,
+    int statusCode = 400) : AgentDefinitionApplicationException(message)
+{
+    public string Code { get; } = code;
+    public string Field { get; } = field;
+    public int StatusCode { get; } = statusCode;
+}

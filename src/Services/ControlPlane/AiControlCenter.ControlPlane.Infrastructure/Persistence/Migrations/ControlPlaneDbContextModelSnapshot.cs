@@ -58,6 +58,27 @@ namespace AiControlCenter.ControlPlane.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("execution_type");
 
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_attempts");
+
+                    b.Property<decimal?>("MaxEstimatedCostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("max_estimated_cost_usd");
+
+                    b.Property<int?>("MaxInputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_input_tokens");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
+
+                    b.Property<string>("ModelRoutesJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("model_routes_json");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -69,6 +90,15 @@ namespace AiControlCenter.ControlPlane.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("status");
+
+                    b.Property<string>("SystemPrompt")
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)")
+                        .HasColumnName("system_prompt");
+
+                    b.Property<string>("ToolPolicyJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tool_policy_json");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -93,9 +123,11 @@ namespace AiControlCenter.ControlPlane.Infrastructure.Persistence.Migrations
 
                     b.ToTable("agent_definitions", "control_plane", t =>
                         {
+                            t.HasCheckConstraint("ck_agent_definitions_ai_configuration", "(execution_type = 'Test' AND system_prompt IS NULL AND model_routes_json IS NULL) OR (execution_type = 'Ai' AND system_prompt IS NOT NULL AND model_routes_json IS NOT NULL AND max_input_tokens > 0 AND max_output_tokens > 0 AND max_estimated_cost_usd > 0 AND max_attempts BETWEEN 1 AND 10)");
+
                             t.HasCheckConstraint("ck_agent_definitions_code_format", "char_length(code) BETWEEN 2 AND 64 AND code ~ '^[a-z0-9]+(-[a-z0-9]+)*$'");
 
-                            t.HasCheckConstraint("ck_agent_definitions_execution_type", "execution_type = 'Test'");
+                            t.HasCheckConstraint("ck_agent_definitions_execution_type", "execution_type IN ('Test','Ai')");
 
                             t.HasCheckConstraint("ck_agent_definitions_name_length", "char_length(btrim(name)) BETWEEN 2 AND 100");
 

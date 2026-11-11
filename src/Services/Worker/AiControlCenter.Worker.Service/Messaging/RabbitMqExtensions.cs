@@ -12,6 +12,7 @@ public static class RabbitMqExtensions
         {
             configurator.SetKebabCaseEndpointNameFormatter();
             configurator.AddConsumer<TestAgentRunConsumer>();
+            configurator.AddConsumer<AiAgentRunConsumer>();
             configurator.UsingRabbitMq((context, rabbit) =>
             {
                 var host = configuration["RabbitMq:Host"] ?? "rabbitmq";
@@ -31,6 +32,7 @@ public static class RabbitMqExtensions
                         TimeSpan.FromSeconds(1),
                         TimeSpan.FromSeconds(5)));
                     endpoint.ConfigureConsumer<TestAgentRunConsumer>(context);
+                    endpoint.ConfigureConsumer<AiAgentRunConsumer>(context);
                 });
             });
         });

@@ -13,7 +13,8 @@ public sealed class CreateAgentRunCommandValidator : AbstractValidator<CreateAge
         RuleFor(command => command.AgentId).NotEmpty();
         RuleFor(command => command.OwnerUserId).NotEmpty();
         RuleFor(command => command.Input).MaximumLength(AgentRun.InputMaxLength);
-        RuleFor(command => command.ExpectedOutcome).IsInEnum();
+        RuleFor(command => command.ExpectedOutcome)
+            .Must(outcome => outcome is null || Enum.IsDefined(outcome.Value));
         RuleFor(command => command.CorrelationId).NotEmpty().MaximumLength(AgentRun.CorrelationIdMaxLength);
         RuleFor(command => command.DelegatedAuthorization)
             .Must(value => value?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true)

@@ -19,6 +19,25 @@ public sealed record ExecuteTestAgentRunV1(
     TestRunOutcomeV1 ExpectedOutcome,
     string CorrelationId);
 
+public sealed record ExecuteAiAgentRunV1(
+    Guid MessageId,
+    Guid RunId,
+    Guid AgentId,
+    Guid OwnerUserId,
+    string AgentName,
+    string Input,
+    string SystemPrompt,
+    string ModelRoutesJson,
+    string ToolPolicyJson,
+    int MaxInputTokens,
+    int MaxOutputTokens,
+    decimal MaxEstimatedCostUsd,
+    int MaxAttempts,
+    decimal AccumulatedEstimatedCostUsd,
+    int AttemptOffset,
+    string CheckpointJson,
+    string CorrelationId);
+
 public enum TestRunOutcomeV1
 {
     Succeed = 0,

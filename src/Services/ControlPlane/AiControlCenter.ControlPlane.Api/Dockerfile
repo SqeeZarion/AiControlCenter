@@ -6,6 +6,7 @@ RUN dotnet publish src/Services/ControlPlane/AiControlCenter.ControlPlane.Api/Ai
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 WORKDIR /app
+RUN apk add --no-cache krb5-libs
 EXPOSE 8080 8081
 COPY --from=build /app/publish .
 USER $APP_UID

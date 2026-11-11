@@ -1,6 +1,6 @@
 # AiControlCenter.Integrations.Application
 
-Зарезервований application layer Integrations. Use cases, ports, DTO і provider abstractions у поточному коді відсутні.
+Application layer містить `IAiProvider`, typed tool contracts/executor port, credential/repository ports, provider DTO, strict fallback policy, pricing metadata та `ProviderConnectionService`. Сервіс виконує owner-scoped route resolution, повторну provider/connection validation і bounded tool/model cycle; transport adapter не виконує tool напряму.
 
 ```mermaid
 flowchart LR
@@ -8,6 +8,6 @@ flowchart LR
     Infrastructure["Integrations.Infrastructure"] --> Application
 ```
 
-Проєкт не має Domain reference, NuGet-залежностей або зовнішніх SDK. Майбутні provider contracts мають бути ізольовані від HTTP host і конкретних adapters.
+Application залежить лише від власного Domain. Конкретні HTTP/SDK adapters і Data Protection реалізації залишаються в Infrastructure.
 
 [Integrations](../README.md) · [Infrastructure](../AiControlCenter.Integrations.Infrastructure/README.md) · [Правила залежностей](../../../../docs/architecture/dependency-rules.md)

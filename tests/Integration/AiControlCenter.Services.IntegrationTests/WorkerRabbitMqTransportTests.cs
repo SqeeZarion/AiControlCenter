@@ -39,7 +39,7 @@ public sealed class WorkerRabbitMqTransportTests : IAsyncLifetime
         await rabbit.StartAsync();
         grpcHost = await StartGrpcHostAsync(progress);
         var grpcAddress = grpcHost.Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            .Features.Get<IServerAddressesFeature>()!.Addresses.First();
         worker = new WebApplicationFactory<WorkerServiceMarker>().WithWebHostBuilder(builder => builder
             .UseEnvironment("Development")
             .UseSetting("RabbitMq:Host", rabbit.Hostname)
@@ -48,7 +48,10 @@ public sealed class WorkerRabbitMqTransportTests : IAsyncLifetime
             .UseSetting("RabbitMq:Password", RabbitPassword)
             .UseSetting("OrchestratorGrpc:Address", grpcAddress)
             .UseSetting("OrchestratorGrpc:ApiKey", WorkerKey)
-            .UseSetting("OrchestratorGrpc:DeadlineSeconds", "5"));
+            .UseSetting("OrchestratorGrpc:DeadlineSeconds", "5")
+            .UseSetting("IntegrationsGrpc:Address", grpcAddress)
+            .UseSetting("IntegrationsGrpc:ApiKey", WorkerKey)
+            .UseSetting("IntegrationsGrpc:DeadlineSeconds", "5"));
         worker.UseKestrel(0);
         _ = worker.CreateClient();
 

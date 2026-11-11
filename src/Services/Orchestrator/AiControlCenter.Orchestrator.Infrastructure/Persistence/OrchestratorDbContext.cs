@@ -8,6 +8,7 @@ public sealed class OrchestratorDbContext(DbContextOptions<OrchestratorDbContext
 {
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
     public DbSet<RunStep> RunSteps => Set<RunStep>();
+    public DbSet<AiProviderAttempt> AiProviderAttempts => Set<AiProviderAttempt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

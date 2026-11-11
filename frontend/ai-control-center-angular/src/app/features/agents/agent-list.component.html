@@ -2,7 +2,7 @@
   <div>
     <p class="eyebrow">Control Plane</p>
     <h2>Агенти</h2>
-    <p>Безпечні тестові агенти, прив’язані до напрямків.</p>
+    <p>AI та детерміновані тестові агенти, прив’язані до напрямків.</p>
   </div>
   @if (canManage()) {
     <a class="primary" routerLink="/agents/new">Додати агента</a>
@@ -75,7 +75,7 @@
           </div>
           <div>
             <dt>Виконання</dt>
-            <dd>Тестове</dd>
+            <dd>{{ agent.executionType === 'Ai' ? 'AI' : 'Тестове' }}</dd>
           </div>
           <div>
             <dt>Версія</dt>
@@ -84,26 +84,46 @@
         </dl>
         @if (!agent.isArchived && agent.status === 'Active') {
           <div class="launch-panel">
-            <label
-              >Вхідні дані
-              <input
-                [ngModel]="inputFor(agent.id)"
-                (ngModelChange)="setInput(agent.id, $event)"
-                maxlength="500"
-                placeholder="Необов’язковий тестовий ввід" /></label
-            ><label
-              >Результат сценарію
-              <select
-                [ngModel]="outcomeFor(agent.id)"
-                (ngModelChange)="setOutcome(agent.id, $event)"
-              >
-                <option value="Succeed">Успіх</option>
-                <option value="Fail">Контрольована помилка</option>
-              </select></label
-            ><button
+            @if (agent.executionType === 'Ai') {
+              <label
+                >AI-запит
+                <textarea
+                  class="ai-run-prompt"
+                  [ngModel]="inputFor(agent.id)"
+                  (ngModelChange)="setInput(agent.id, $event)"
+                  maxlength="500"
+                  rows="4"
+                  placeholder="Опишіть завдання для AI"
+                ></textarea>
+              </label>
+            } @else {
+              <label
+                >Вхідні дані
+                <input
+                  [ngModel]="inputFor(agent.id)"
+                  (ngModelChange)="setInput(agent.id, $event)"
+                  maxlength="500"
+                  placeholder="Необов’язковий тестовий ввід"
+                />
+              </label>
+              <label
+                >Результат сценарію
+                <select
+                  [ngModel]="outcomeFor(agent.id)"
+                  (ngModelChange)="setOutcome(agent.id, $event)"
+                >
+                  <option value="Succeed">Успіх</option>
+                  <option value="Fail">Контрольована помилка</option>
+                </select>
+              </label>
+            }
+            <button
               class="primary"
               type="button"
-              [disabled]="launchingId() === agent.id"
+              [disabled]="
+                launchingId() === agent.id ||
+                (agent.executionType === 'Ai' && !inputFor(agent.id).trim())
+              "
               (click)="launch(agent)"
             >
               {{ launchingId() === agent.id ? 'Запуск…' : 'Запустити' }}

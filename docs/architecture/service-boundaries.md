@@ -6,8 +6,8 @@ flowchart TB
     Identity["Identity: users і sessions"]
     ControlPlane["ControlPlane: Directions і AgentDefinitions"]
     Orchestrator["Orchestrator: AgentRuns і transitions"]
-    Integrations["Integrations: isolated owner"]
-    Worker["Worker: stateless host"]
+    Integrations["Integrations: provider connections і execution receipts"]
+    Worker["Worker: stateless execution host"]
     Gateway --> Identity
     Gateway --> ControlPlane
     Gateway --> Orchestrator
@@ -24,19 +24,19 @@ flowchart TB
 
 ## ControlPlane
 
-Володіє схемою `control_plane`, aggregates `Direction` і `AgentDefinition`, REST-каталогом та versioned gRPC snapshot для запуску активного Test agent. REST і gRPC захищені delegated user authentication; інші сервіси не читають цю схему напряму.
+Володіє схемою `control_plane`, aggregates `Direction` і `AgentDefinition`, REST-каталогом та versioned gRPC snapshot. AI-конфігурація агента (prompt, ordered routes, tools і safety limits) є декларативною; credentials тут не зберігаються. REST і gRPC захищені delegated user authentication; інші сервіси не читають цю схему напряму.
 
 ## Orchestrator
 
-Володіє схемою `orchestrator`, `AgentRun`/`RunStep`, переходами стану й transactional outbox. Отримує Agent snapshot через ControlPlane gRPC, публікує commands/status events і приймає Worker progress через окремо authenticated gRPC.
+Володіє схемою `orchestrator`, `AgentRun`/`RunStep`, immutable trusted AI snapshot, `AiProviderAttempt`, versioned/hash-verified checkpoint, pause/resume transitions і transactional outbox. Отримує декларативний Agent snapshot через ControlPlane gRPC, резолвить логічні provider routes через Integrations для власника Run, публікує versioned commands/status events і приймає Worker progress через окремо authenticated gRPC.
 
 ## Worker
 
-Stateless host з MassTransit consumer для bounded deterministic Test workflow, observability та health. База даних, private signing key, shell і довільне виконання відсутні.
+Stateless host з MassTransit consumers для bounded Test та AI workflow. Він координує trusted ordered routes, fallback, attempt cursor і checkpoint transport, але не читає PostgreSQL, credentials або private signing key. Provider adapters лише декодують typed tool calls; allowlisted tool executor знаходиться в Integrations Application boundary. Shell, довільні URLs/paths і довільне виконання відсутні.
 
 ## Integrations
 
-Володіє схемою `integrations`. External API adapters, OAuth accounts, provider SDKs і business endpoints відсутні.
+Володіє схемою `integrations`, user-scoped `ProviderConnection`, OAuth state, atomic budget reservations і durable execution receipts. Лише цей сервіс розшифровує provider credential, резолвить route до connection власника Run, перевіряє dynamic model catalog, виконує allowlisted tools і викликає GitHub Copilot/OpenAI/xAI adapters. Public REST приймає delegated JWT; Orchestrator і Worker використовують окремий authenticated gRPC boundary. Raw credentials ніколи не виходять із сервісу.
 
 ## Власність даних
 
